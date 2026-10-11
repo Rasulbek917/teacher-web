@@ -1,0 +1,28 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "backend": {
+      "root": "backend",
+      "runtime": "container",
+      "entrypoint": "Dockerfile"
+    },
+    "frontend": {
+      "root": "frontend",
+      "framework": "vite"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/sockeft.io/(.*)",
+      "destination": { "service": "backend" }
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": { "service": "backend" }
+    },
+    {
+      "source": "/(.*)",
+      "destination": { "service": "frontend" }
+    }
+  ]
+}

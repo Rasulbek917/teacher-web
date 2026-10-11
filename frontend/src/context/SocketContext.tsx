@@ -30,7 +30,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       setSocket(null);
       return;
     }
-    const s = io(API_URL, {
+    const s = io(API_URL || window.location.origin, {
       auth: { token },
       transports: ['websocket', 'polling'],
     });

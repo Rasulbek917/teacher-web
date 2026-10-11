@@ -1,7 +1,19 @@
 import axios, { AxiosError } from 'axios';
 
+/**
+ * API bazaviy manzili (VPS va Vercel uchun bir xil kod ishlashi kerak):
+ * - `VITE_API_URL` berilgan bo'lsa (VPS / docker / lokal dev) — o'sha ishlatiladi.
+ * - Berilmagan bo'lsa: dev'da `http://localhost:3000`, production'da bo'sh satr
+ *   (same-origin). Bo'sh satrda `axios` `baseURL` = `/api` bo'ladi va so'rovlar
+ *   joriy domenga ketadi — Vercel'dagi `/api` rewrite ularni backendga uzatadi.
+ */
+const rawApiUrl = import.meta.env?.VITE_API_URL as string | undefined;
 export const API_URL: string =
-  (import.meta.env?.VITE_API_URL as string) || 'http://localhost:3000';
+  rawApiUrl != null && rawApiUrl !== ''
+    ? rawApiUrl.replace(/\/+$/, '')
+    : import.meta.env?.DEV
+      ? 'http://localhost:3000'
+      : '';
 
 export const tokenStore = {
   get: () => localStorage.getItem('et_token'),

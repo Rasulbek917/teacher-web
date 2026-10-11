@@ -1,7 +1,8 @@
-import { diskStorage } from 'multer';
+import { diskStorage, memoryStorage } from 'multer';
 import { randomBytes } from 'crypto';
 import { mkdirSync, existsSync } from 'fs';
 import { uploadDir } from './files.util';
+import { blobEnabled } from './blob.storage';
 
 /**
  * Faqat ruxsat etilgan MIME turlari uchun xavfsiz kengaytmalar.
@@ -51,17 +52,22 @@ export const uploadMaxMb = {
 } as const;
 
 export function multerOptions(maxMb: number = uploadMaxMb.attachment) {
+  // Vercel Blob rejimida xotiraga o'qiymiz (lokal disk vaqtinchalik/read-only),
+  // aks holda diskka yozamiz (VPS).
+  const storage = blobEnabled()
+    ? memoryStorage()
+    : diskStorage({
+        destination: (_req, _file, cb) => {
+          const dir = uploadDir();
+          if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+          cb(null, dir);
+        },
+        filename: (_req, file, cb) => {
+          cb(null, randomBytes(16).toString('hex') + mimeExtension(file.mimetype));
+        },
+      });
   return {
-    storage: diskStorage({
-      destination: (_req, _file, cb) => {
-        const dir = uploadDir();
-        if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-        cb(null, dir);
-      },
-      filename: (_req, file, cb) => {
-        cb(null, randomBytes(16).toString('hex') + mimeExtension(file.mimetype));
-      },
-    }),
+    storage,
     limits: { fileSize: maxMb * 1024 * 1024 },
   };
 }

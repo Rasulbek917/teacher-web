@@ -4,6 +4,7 @@ import {
   MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
@@ -32,7 +33,7 @@ function allowedOrigins(): string[] {
   },
 })
 export class RealtimeGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
+  implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit
 {
   private readonly logger = new Logger('RealtimeGateway');
 
@@ -44,6 +45,26 @@ export class RealtimeGateway
     private prisma: PrismaService,
     private chat: ChatService,
   ) {}
+
+  /**
+   * Ko'p instance (masalan Vercel yoki bir nechta konteyner) uchun Redis adapter.
+   * `REDIS_URL` berilmasa xotiradagi standart adapter ishlatiladi (VPS uchun yetarli).
+   */
+  async afterInit(server: Server) {
+    const url = process.env.REDIS_URL;
+    if (!url) return;
+    try {
+      const { createAdapter } = await import('@socket.io/redis-adapter');
+      const { createClient } = await import('redis');
+      const pub = createClient({ url });
+      const sub = pub.duplicate();
+      await Promise.all([pub.connect(), sub.connect()]);
+      server.adapter(createAdapter(pub as any, sub as any));
+      this.logger.log('Socket.IO Redis adapter ulandi');
+    } catch (e) {
+      this.logger.warn(`Socket.IO Redis adapter ulanmadi: ${e}`);
+    }
+  }
 
   async handleConnection(client: Socket) {
     try {

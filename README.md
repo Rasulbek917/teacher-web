@@ -272,7 +272,46 @@ docker compose -f docker-compose.prod.yml down -v
 
 ---
 
-## 6. Xavfsizlik eslatmalari
+## 6. Vercel'ga deploy (ixtiyoriy — VPS bilan bir xil kod)
+
+Bir xil repodan ikkala muhitga deploy qilinadi. Ildizdagi `vercel.json` ikki
+servisni e'lon qiladi va yo'llarni taqsimlaydi:
+
+- `backend` — NestJS (Docker container, mavjud `backend/Dockerfile`);
+- `frontend` — Vite (statik);
+
+Rewrite'lar: `/api/*` va `/socket.io/*` → `backend`; qolgani → `frontend`.
+
+### Kerakli Vercel env o'zgaruvchilari
+
+| O'zgaruvchi | Qiymat |
+| --- | --- |
+| `DATABASE_URL` | Neon (yoki boshqa) Postgres, `?sslmode=require` bilan |
+| `JWT_SECRET` | kuchli, tasodifiy sir |
+| `SUPERADMIN_PASSWORD` | kuchli parol |
+| `CORS_ORIGIN` | `https://teacher.<domen>.uz` |
+| `NODE_ENV` | `production` |
+| `RUN_MIGRATIONS_ON_START` | `false` |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob tokeni (fayllar uchun) |
+| `REDIS_URL` | Upstash Redis (ko'p instance chat uchun) |
+| `CRON_SECRET` | cron endpoint himoyasi |
+
+> `frontend` uchun `VITE_API_URL` **bermang** — bo'sh bo'lsa same-origin
+> (`/api` rewrite) ishlaydi. Berilsa, faqat shu domen ishlaydi.
+
+### Cheklovlar (muhim!)
+
+- **Vercel Functions body limiti 4.5 MB** — shundan katta fayl/video yuklab bo'lmaydi.
+  Katta videolar uchun VPS ishlatilsin.
+- **Cron (dars eslatmalari):** Hobby tarifda kuniga 1 marta ishlaydi. Har daqiqada
+  kerak bo'lsa Pro tarifga o'tib `vercel.json` ga qo'shing:
+  `"crons": [{ "path": "/api/cron/lesson-reminders", "schedule": "* * * * *" }]`
+- **WebSocket** Vercelda beta holatida; `REDIS_URL` (Upstash) bersangiz bir nechta
+  instance orasida chat to'g'ri ishlaydi, aks holda faqat bitta instance ko'radi.
+
+To'liq funksiyalar (katta video, tez-tez cron, barqaror WebSocket) uchun **VPS** tavsiya etiladi.
+
+## 7. Xavfsizlik eslatmalari
 
 - `JWT_SECRET` va barcha parollarni albatta o'zgartiring.
 - `CORS_ORIGIN` faqat o'z domeningizni o'z ichiga olsin.

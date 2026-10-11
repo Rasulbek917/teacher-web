@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  NotFoundException,
   Param,
   Query,
   Req,
@@ -8,9 +9,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { Readable } from 'stream';
 import { Request, Response } from 'express';
 import { Role } from '@prisma/client';
 import { FilesService } from './files.service';
+import { getBlobStream } from './blob.storage';
 import { Public } from '../common/decorators/public.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -70,7 +73,7 @@ export class FilesController {
     @Res() res: Response,
   ) {
     const userId = await this.resolveUserId(req, token);
-    const { file, path } = await this.files.authorize(id, userId);
+    const { file, path, remoteUrl } = await this.files.authorize(id, userId);
 
     res.setHeader('Content-Type', file.mimeType);
     res.setHeader('Content-Length', String(file.size));
@@ -79,6 +82,17 @@ export class FilesController {
       'Content-Disposition',
       `inline; filename="${encodeURIComponent(file.filename)}"`,
     );
-    res.sendFile(path);
+
+    // Vercel Blob: avtorizatsiyadan keyin stream qilib beramiz (URL oshkor bo'lmaydi).
+    if (remoteUrl) {
+      const result = await getBlobStream(remoteUrl);
+      if (!result || result.statusCode !== 200 || !result.stream) {
+        throw new NotFoundException('Fayl serverda topilmadi');
+      }
+      Readable.fromWeb(result.stream as any).pipe(res);
+      return;
+    }
+
+    res.sendFile(path as string);
   }
 }

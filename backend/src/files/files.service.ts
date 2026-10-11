@@ -7,9 +7,17 @@ import {
 } from '@nestjs/common';
 import { FileScope, Role } from '@prisma/client';
 import { existsSync, mkdirSync, unlinkSync } from 'fs';
+import { randomBytes } from 'crypto';
 import { join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { extractFileId, uploadDir } from './files.util';
+import { mimeExtension } from './multer.config';
+import {
+  blobEnabled,
+  deleteFromBlob,
+  isRemotePath,
+  uploadToBlob,
+} from './blob.storage';
 
 export type UploadKind = 'avatar' | 'image' | 'video' | 'voice' | 'file' | 'attachment';
 
@@ -47,8 +55,11 @@ export class FilesService {
   private readonly logger = new Logger('FilesService');
 
   constructor(private prisma: PrismaService) {
-    const dir = uploadDir();
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    // Vercel Blob rejimida lokal papka kerak emas (fayl tizimi vaqtinchalik bo'lishi mumkin).
+    if (!blobEnabled()) {
+      const dir = uploadDir();
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    }
   }
 
   private limits(): Record<UploadKind, { mimes: string[]; maxMb: number }> {
@@ -101,9 +112,23 @@ export class FilesService {
       );
     }
 
+    // Faylning saqlash manzili: Vercel Blob (URL) yoki disk (fayl nomi).
+    let storedPath: string;
+    if (blobEnabled()) {
+      if (!file.buffer) {
+        cleanup();
+        throw new BadRequestException('Fayl buferi topilmadi');
+      }
+      const pathname = randomBytes(16).toString('hex') + mimeExtension(mime);
+      storedPath = await uploadToBlob(pathname, file.buffer, mime);
+      cleanup(); // diskda vaqtinchalik nusxa qolgan bo'lsa tozalaymiz
+    } else {
+      storedPath = file.filename;
+    }
+
     const record = await this.prisma.uploadedFile.create({
       data: {
-        path: file.filename,
+        path: storedPath,
         filename: file.originalname,
         mimeType: mime,
         size: file.size,
@@ -183,9 +208,13 @@ export class FilesService {
 
     if (!allowed) throw new ForbiddenException('Bu faylga ruxsat yo\'q');
 
+    // Vercel Blob: controller URL'ni stream qiladi (public URL'ni oshkor qilmaymiz).
+    if (isRemotePath(file.path)) {
+      return { file, path: undefined as string | undefined, remoteUrl: file.path };
+    }
     const path = this.absPath(file.path);
     if (!existsSync(path)) throw new NotFoundException('Fayl serverda topilmadi');
-    return { file, path };
+    return { file, path, remoteUrl: undefined as string | undefined };
   }
 
   /** URL bo'yicha fayl yozuvini va diskdagi faylni o'chiradi. */
@@ -199,8 +228,12 @@ export class FilesService {
     const file = await this.prisma.uploadedFile.findUnique({ where: { id } });
     if (!file) return;
     try {
-      const p = this.absPath(file.path);
-      if (existsSync(p)) unlinkSync(p);
+      if (isRemotePath(file.path)) {
+        await deleteFromBlob(file.path);
+      } else {
+        const p = this.absPath(file.path);
+        if (existsSync(p)) unlinkSync(p);
+      }
     } catch (e) {
       this.logger.warn(`Faylni o'chirishda xatolik: ${e}`);
     }

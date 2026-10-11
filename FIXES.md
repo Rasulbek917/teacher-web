@@ -254,3 +254,44 @@ o'qituvchi **Materiallar** sahifasi "Xatolik yuz berdi" ko'rsatgan.
 - Qo'shimcha tuzatish (bo'sh query `type=`) alohida tekshirildi: `GET /api/materials`
   `type=` bilan **200**, `type=BOGUS` bilan **400**. `smoke.mjs` ga ham regressiya
   tekshiruvi qo'shildi (endi 55 tekshiruv).
+
+---
+
+## Vercel + VPS (ikkala muhit) moslashtirish
+
+Maqsad: **bir xil kod** VPS'da ham, Vercel'da ham ishlashi. Barcha yangi
+xulq-atvor env o'zgaruvchilari orqali boshqariladi va env berilmagan holatda
+VPS xatti-harakati **o'zgarmaydi**.
+
+### Yangi fayllar
+- `vercel.json` — servislar (`backend`, `frontend`) + rewrite'lar.
+- `backend/src/files/blob.storage.ts` — Vercel Blob drayveri.
+- `backend/src/notifications/lesson-reminder.controller.ts` — `POST /api/cron/lesson-reminders`.
+
+### O'zgartirilgan fayllar
+- `frontend/src/lib/api.ts` — `VITE_API_URL` bo'lmasa production'da same-origin (`/api`).
+- `frontend/src/context/SocketContext.tsx` — `API_URL || window.location.origin`.
+- `backend/src/files/files.service.ts` — Blob yoki disk (env bo'yicha).
+- `backend/src/files/multer.config.ts` — Blob'da `memoryStorage`, aks holda `diskStorage`.
+- `backend/src/files/files.controller.ts` — Blob URL'ni avtorizatsiyadan keyin stream qiladi.
+- `backend/src/chat/realtime.gateway.ts` — `REDIS_URL` bo'lsa Redis adapter (ko'p instance).
+- `backend/docker-entrypoint.sh` — `RUN_MIGRATIONS_ON_START` (standart `true`).
+- `backend/src/notifications/notifications.module.ts` — yangi controller.
+- `backend/package.json` — `@vercel/blob`, `@socket.io/redis-adapter`, `redis`.
+- `.env.example`, `README.md` — hujjat.
+
+### Xatti-harakat
+- `BLOB_READ_WRITE_TOKEN` yo'q -> fayllar diskda (VPS, avvalgidek).
+- `BLOB_READ_WRITE_TOKEN` bor -> fayllar Vercel Blob'da (private, avtorizatsiyalangan stream).
+- `REDIS_URL` yo'q -> xotiradagi Socket.IO adapter (VPS).
+- `REDIS_URL` bor -> Redis adapter (Vercel / ko'p konteyner).
+- `RUN_MIGRATIONS_ON_START=false` -> startda migratsiya/seed o'tkazib yuboriladi (Vercel).
+
+### Tekshiruv
+- Backend `npm run build` — muvaffaqiyatli.
+- Frontend `npm run build` — muvaffaqiyatli.
+- `node smoke.mjs` — **55/55 PASS** (VPS/disk rejimida).
+
+### Bilib turish kerak
+- Vercel Functions body limiti **4.5 MB** — katta video Vercel'da yuklanmaydi (VPS kerak).
+- Vercel Cron Hobby'da kuniga 1 marta; har daqiqa uchun Pro lozim.
