@@ -1,0 +1,67 @@
+import { diskStorage } from 'multer';
+import { randomBytes } from 'crypto';
+import { mkdirSync, existsSync } from 'fs';
+import { uploadDir } from './files.util';
+
+/**
+ * Faqat ruxsat etilgan MIME turlari uchun xavfsiz kengaytmalar.
+ * Kengaytma originalname'dan emas, MIME turidan olinadi — bu `.html` kabi
+ * xavfli fayllar yuklanishining oldini oladi.
+ */
+const MIME_EXT: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'video/mp4': '.mp4',
+  'video/webm': '.webm',
+  'video/quicktime': '.mov',
+  'video/x-matroska': '.mkv',
+  'video/x-msvideo': '.avi',
+  'audio/webm': '.webm',
+  'audio/ogg': '.ogg',
+  'audio/mpeg': '.mp3',
+  'audio/mp4': '.m4a',
+  'audio/wav': '.wav',
+  'audio/x-wav': '.wav',
+  'application/pdf': '.pdf',
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/vnd.ms-powerpoint': '.ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+  'application/vnd.ms-excel': '.xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'text/plain': '.txt',
+  'application/zip': '.zip',
+  'application/x-rar-compressed': '.rar',
+};
+
+export function mimeExtension(mime: string): string {
+  return MIME_EXT[(mime || '').toLowerCase()] || '.bin';
+}
+
+/** Tur bo'yicha maksimal hajm (MB). Avatar/rasm uchun 200 MB emas. */
+export const uploadMaxMb = {
+  avatar: 5,
+  image: 10,
+  voice: 10,
+  file: 10,
+  attachment: 200,
+  video: 200,
+} as const;
+
+export function multerOptions(maxMb: number = uploadMaxMb.attachment) {
+  return {
+    storage: diskStorage({
+      destination: (_req, _file, cb) => {
+        const dir = uploadDir();
+        if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+      },
+      filename: (_req, file, cb) => {
+        cb(null, randomBytes(16).toString('hex') + mimeExtension(file.mimetype));
+      },
+    }),
+    limits: { fileSize: maxMb * 1024 * 1024 },
+  };
+}

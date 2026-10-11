@@ -1,0 +1,87 @@
+# ---- Teacher Web: production stack ( HTTPS + WebSocket ) ----
+# Ishlatish:
+#   1) .env faylini to'ldiring (.env.example dan nusxa oling)
+#   2) docker compose -f docker-compose.prod.yml up -d --build
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: Asia/Tashkent
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # Port tashqariga chiqarilmaydi (faqat ichki tarmoq)
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      TZ: Asia/Tashkent
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      SUPERADMIN_LOGIN: ${SUPERADMIN_LOGIN}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD}
+      SUPERADMIN_FIRSTNAME: ${SUPERADMIN_FIRSTNAME}
+      SUPERADMIN_LASTNAME: ${SUPERADMIN_LASTNAME}
+      SUPERADMIN_PHONE: ${SUPERADMIN_PHONE}
+      SUPERADMIN_RESET_PASSWORD: ${SUPERADMIN_RESET_PASSWORD:-false}
+      UPLOAD_DIR: /app/uploads
+      MAX_VIDEO_SIZE_MB: ${MAX_VIDEO_SIZE_MB:-200}
+      MAX_ATTACHMENT_SIZE_MB: ${MAX_ATTACHMENT_SIZE_MB:-10}
+      MAX_AVATAR_SIZE_MB: ${MAX_AVATAR_SIZE_MB:-5}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      LESSON_REMINDER_MINUTES: ${LESSON_REMINDER_MINUTES:-30}
+      LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
+      LOGIN_BLOCK_MINUTES: ${LOGIN_BLOCK_MINUTES:-5}
+    volumes:
+      - uploads:/app/uploads
+    expose:
+      - "3000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    expose:
+      - "80"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - backend
+      - frontend
+    environment:
+      DOMAIN: ${DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  uploads:
+  caddy_data:
+  caddy_config:

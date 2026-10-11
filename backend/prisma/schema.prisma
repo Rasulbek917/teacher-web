@@ -1,0 +1,351 @@
+// Teacher Web - Prisma schema
+// Vaqt zonasi: Asia/Tashkent (hisob-kitoblar backendda amalga oshiriladi)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  TEACHER
+  STUDENT
+}
+
+enum Language {
+  UZ
+  EN
+}
+
+enum Theme {
+  LIGHT
+  DARK
+}
+
+enum MaterialType {
+  VIDEO
+  IMAGE
+}
+
+enum VideoSource {
+  UPLOAD
+  YOUTUBE
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  LATE
+}
+
+enum ReviewResult {
+  DONE // BAJARILDI
+  WRONG // XATO
+}
+
+enum PaymentStatus {
+  PAID // TO'LANGAN
+  PARTIAL // QISMAN
+  UNPAID // TO'LANMAGAN
+}
+
+enum NotificationType {
+  LESSON_SOON
+  HOMEWORK_SUBMITTED
+  HOMEWORK_REVIEWED
+}
+
+enum ConversationType {
+  GROUP
+  DIRECT
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  VIDEO
+  VOICE
+}
+
+enum FileScope {
+  AVATAR
+  GROUP // material yoki homework biriktirmasi (scopeId = groupId)
+  SUBMISSION // o'quvchi javobi (scopeId = groupId)
+  CONVERSATION // chat xabari (scopeId = conversationId)
+}
+
+model UploadedFile {
+  id        String    @id @default(cuid())
+  path      String    @unique
+  filename  String
+  mimeType  String
+  size      Int
+  scope     FileScope
+  scopeId   String?
+  ownerId   String
+  createdAt DateTime  @default(now())
+
+  @@index([scope, scopeId])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  role         Role
+  firstName    String
+  lastName     String
+  phone        String
+  login        String   @unique
+  passwordHash String
+  avatarUrl    String?
+  language     Language @default(UZ)
+  theme        Theme    @default(LIGHT)
+  isBlocked    Boolean  @default(false)
+  // Parol o'zgarganda oshiriladi: eski tokenlar kuchini yo'qotadi.
+  tokenVersion Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  teacherProfile TeacherProfile?
+  studentProfile StudentProfile?
+
+  teacherGroups Group[]               @relation("TeacherGroups")
+  memberships   GroupMembership[]
+  attendance    Attendance[]
+  submissions   Submission[]
+  teacherPayments Payment[]           @relation("TeacherPayments")
+  studentPayments Payment[]           @relation("StudentPayments")
+  notifications Notification[]
+  sentMessages  Message[]             @relation("SentMessages")
+  messageReads  MessageRead[]
+  participants  ConversationParticipant[]
+
+  @@index([role])
+  @@index([createdAt])
+  @@index([login])
+}
+
+model TeacherProfile {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  centerName String
+  city       String
+  createdAt  DateTime @default(now())
+
+  @@index([centerName])
+}
+
+model StudentProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parentPhone String
+  createdAt   DateTime @default(now())
+}
+
+model Group {
+  id           String   @id @default(cuid())
+  teacherId    String
+  teacher      User     @relation("TeacherGroups", fields: [teacherId], references: [id], onDelete: Cascade)
+  name         String
+  level        String
+  lessonDays   Int[] // 1=Dushanba ... 7=Yakshanba
+  lessonTime   String // "HH:mm"
+  monthlyPrice Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships   GroupMembership[]
+  materials     Material[]
+  homeworks     Homework[]
+  attendance    Attendance[]
+  payments      Payment[]
+  conversations Conversation[]
+
+  @@index([teacherId])
+}
+
+model GroupMembership {
+  id          String   @id @default(cuid())
+  groupId     String
+  studentId   String
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  customPrice Int?
+  joinedAt    DateTime @default(now())
+
+  @@unique([groupId, studentId])
+  @@index([studentId])
+}
+
+model Material {
+  id          String       @id @default(cuid())
+  groupId     String
+  group       Group        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  type        MaterialType
+  title       String
+  description String?
+  videoSource VideoSource?
+  fileUrl     String?
+  youtubeUrl  String?
+  imageUrls   String[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([groupId])
+}
+
+model Homework {
+  id             String   @id @default(cuid())
+  groupId        String
+  group          Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  dueAt          DateTime?
+  attachmentUrls String[] @default([])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  submissions Submission[]
+
+  @@index([groupId])
+  @@index([dueAt])
+}
+
+model Submission {
+  id          String           @id @default(cuid())
+  homeworkId  String
+  studentId   String
+  homework    Homework         @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  student     User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  text        String?
+  fileUrl     String?
+  status      SubmissionStatus
+  submittedAt DateTime
+  result      ReviewResult?
+  grade       Int?
+  comment     String?
+  reviewedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([homeworkId, studentId])
+  @@index([studentId])
+}
+
+model Attendance {
+  id        String   @id @default(cuid())
+  groupId   String
+  studentId String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  present   Boolean
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([studentId, groupId, date])
+  @@index([groupId, date])
+  @@index([studentId, date])
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  teacherId     String
+  teacher       User          @relation("TeacherPayments", fields: [teacherId], references: [id], onDelete: Cascade)
+  studentId     String?
+  student       User?         @relation("StudentPayments", fields: [studentId], references: [id], onDelete: SetNull)
+  groupId       String?
+  group         Group?        @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  studentName   String
+  groupName     String
+  priceSnapshot Int
+  periodYear    Int
+  periodMonth   Int
+  amount        Int
+  status        PaymentStatus
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Bir o'quvchi + guruh + oy uchun faqat bitta to'lov yozuvi (dublikatlarni oldini oladi)
+  @@unique([studentId, groupId, periodYear, periodMonth])
+  @@index([teacherId, periodYear, periodMonth])
+  @@index([studentId])
+  @@index([groupId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  link      String?
+  isRead    Boolean          @default(false)
+  dedupeKey String?          @unique
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+}
+
+model Conversation {
+  id            String           @id @default(cuid())
+  type          ConversationType
+  groupId       String?          @unique
+  group         Group?           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  lastMessageAt DateTime         @default(now())
+  createdAt     DateTime         @default(now())
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([type])
+  @@index([lastMessageAt])
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  userId         String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  type           MessageType
+  text           String?
+  fileUrl        String?
+  editedAt       DateTime?
+  createdAt      DateTime     @default(now())
+
+  reads MessageRead[]
+
+  @@index([conversationId, createdAt])
+}
+
+model MessageRead {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt    DateTime @default(now())
+
+  @@unique([messageId, userId])
+  @@index([userId])
+}

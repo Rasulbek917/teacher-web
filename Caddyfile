@@ -1,0 +1,44 @@
+# Teacher Web — Caddy reverse proxy (avtomatik HTTPS + WebSocket)
+# DOMAIN muhit o'zgaruvchisi docker-compose.prod.yml orqali beriladi.
+#
+# Caddy reverse_proxy WebSocket (Upgrade) so'rovlarini avtomatik qo'llab-quvvatlaydi,
+# shuning uchun alohida header shart emas.
+
+{$DOMAIN} {
+	encode gzip zstd
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Katta video/fayl yuklash (proxy limiti)
+	request_body {
+		max_size 300MB
+	}
+
+	# REST API
+	handle /api/* {
+		reverse_proxy backend:3000
+	}
+
+	# Socket.IO (WebSocket) — uzoq ulanish
+	handle /socket.io/* {
+		reverse_proxy backend:3000 {
+			flush_interval -1
+		}
+	}
+
+	# SPA (frontend statik fayllari)
+	handle {
+		reverse_proxy frontend:80
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
