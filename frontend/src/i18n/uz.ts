@@ -168,6 +168,9 @@ export const uz = {
   oldPassword: 'Eski parol',
   newPassword: 'Yangi parol',
   uploadAvatar: 'Profil rasmini yuklash',
+  online: 'Online',
+  offline: 'Oflayn',
+  roleAdmin: 'Administrator',
 
   // Student
   myHome: 'Bosh sahifa',

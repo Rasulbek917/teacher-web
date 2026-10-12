@@ -27,6 +27,12 @@ export class CreateHomeworkDto {
   @ValidateIf((o) => o.dueAt !== '')
   @IsDateString({}, { message: 'Topshirish muddati noto\'g\'ri' })
   dueAt?: string;
+
+  // Oldindan bo'laklab yuklangan biriktirma URL'lari (JSON massiv). Fayllar
+  // avval POST /api/files/upload orqali yuklanadi, so'ng URL'lar shu yerda beriladi.
+  @IsOptional()
+  @IsString()
+  attachmentUrls?: string;
 }
 
 export class UpdateHomeworkDto {
@@ -50,6 +56,11 @@ export class UpdateHomeworkDto {
   @IsOptional()
   @IsString()
   keepAttachmentUrls?: string;
+
+  // Yangi biriktirmalar (bo'laklab yuklangan fayllar URL'lari, JSON massiv)
+  @IsOptional()
+  @IsString()
+  attachmentUrls?: string;
 }
 
 export class SubmitHomeworkDto {
@@ -57,6 +68,12 @@ export class SubmitHomeworkDto {
   @IsString()
   @MaxLength(5000)
   text?: string;
+
+  // Bo'laklab yuklangan javob fayli URL'i (ixtiyoriy)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  fileUrl?: string;
 }
 
 /** Uy vazifalari ro'yxati uchun filtr (sahifalash + guruh). */

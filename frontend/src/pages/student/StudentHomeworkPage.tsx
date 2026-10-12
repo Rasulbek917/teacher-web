@@ -16,6 +16,7 @@ import {
   Pagination,
 } from '../../components/ui';
 import { fmtDateTime } from '../../lib/format';
+import { uploadFileChunked } from '../../lib/upload';
 import { submissionStatusMeta } from '../../lib/homeworkStatus';
 import type { Paginated, StudentHomeworkItem, StudentHomeworkDetail } from '../../lib/types';
 
@@ -90,10 +91,19 @@ export function StudentHomeworkPage() {
     }
     setSaving(true);
     try {
-      const fd = new FormData();
-      if (answer.trim()) fd.append('text', answer.trim());
-      if (file) fd.append('file', file);
-      await api.post(`/my/homework/${detail.id}/submit`, fd);
+      let fileUrl: string | undefined;
+      if (file) {
+        const uploaded = await uploadFileChunked(file, {
+          kind: 'file',
+          scope: 'SUBMISSION',
+          scopeId: detail.groupId,
+        });
+        fileUrl = uploaded.url;
+      }
+      await api.post(`/my/homework/${detail.id}/submit`, {
+        text: answer.trim() || undefined,
+        fileUrl,
+      });
       toast(t('homeworkSubmitted'), 'success');
       const { data } = await api.get(`/my/homework/${detail.id}`);
       setDetail(data);

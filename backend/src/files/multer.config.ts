@@ -41,14 +41,14 @@ export function mimeExtension(mime: string): string {
   return MIME_EXT[(mime || '').toLowerCase()] || '.bin';
 }
 
-/** Tur bo'yicha maksimal hajm (MB). Avatar/rasm uchun 200 MB emas. */
+/** Tur bo'yicha maksimal hajm (MB). Avatar kichik; qolganlari bo'laklab yuklanadi. */
 export const uploadMaxMb = {
   avatar: 5,
   image: 10,
   voice: 10,
-  file: 10,
-  attachment: 200,
-  video: 200,
+  file: 250,
+  attachment: 250,
+  video: 250,
 } as const;
 
 export function multerOptions(maxMb: number = uploadMaxMb.attachment) {
@@ -68,6 +68,18 @@ export function multerOptions(maxMb: number = uploadMaxMb.attachment) {
       });
   return {
     storage,
+    limits: { fileSize: maxMb * 1024 * 1024 },
+  };
+}
+
+/**
+ * Bo'laklab (chunk) yuklash uchun multer sozlamalari. Har bir bo'lak kichik
+ * (<= 4MB) bo'lgani uchun har doim xotiraga o'qiladi — bu `file.buffer`
+ * mavjudligini kafolatlaydi (diskda saqlash rejimida ham).
+ */
+export function chunkMulterOptions(maxMb: number) {
+  return {
+    storage: memoryStorage(),
     limits: { fileSize: maxMb * 1024 * 1024 },
   };
 }

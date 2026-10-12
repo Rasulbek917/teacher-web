@@ -1,13 +1,10 @@
-import { Body, Controller, Get, Patch, Post, UploadedFile, UseInterceptors } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { BadRequestException, Body, Controller, Get, Patch, Post } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
 import { FilesService } from '../files/files.service';
-import { multerOptions, uploadMaxMb } from '../files/multer.config';
-import { FileScope } from '@prisma/client';
 
 @Controller('users')
 export class UsersController {
@@ -39,13 +36,21 @@ export class UsersController {
     return this.users.changePassword(user.id, dto);
   }
 
+  /**
+   * Avatar fayli avval POST /api/files/upload orqali yuklanadi
+   * (scope=AVATAR), so'ng shu yerda URL beriladi. URL avval shu
+   * foydalanuvchi yuklagan haqiqiy avatar fayli ekani tekshiriladi.
+   */
   @Post('me/avatar')
-  @UseInterceptors(FileInterceptor('file', multerOptions(uploadMaxMb.avatar)))
   async uploadAvatar(
     @CurrentUser() user: AuthUser,
-    @UploadedFile() file: Express.Multer.File,
+    @Body() body: { fileUrl?: string },
   ) {
-    const saved = await this.files.save(file, 'avatar', FileScope.AVATAR, null, user.id);
-    return this.users.setAvatar(user.id, saved.url);
+    if (!body.fileUrl) throw new BadRequestException('Fayl yuklanmadi');
+    const owned = await this.files.isOwnedAvatarFile(body.fileUrl, user.id);
+    if (!owned) {
+      throw new BadRequestException("Avatar fayli ruxsat etilmagan");
+    }
+    return this.users.setAvatar(user.id, body.fileUrl);
   }
 }

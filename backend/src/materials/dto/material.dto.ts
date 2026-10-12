@@ -26,6 +26,17 @@ export class CreateMaterialDto {
   @IsOptional()
   @IsString()
   youtubeUrl?: string;
+
+  // Bo'laklab yuklangan video URL'i (VIDEO/UPLOAD uchun)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  fileUrl?: string;
+
+  // Bo'laklab yuklangan rasmlar URL'lari (IMAGE uchun, JSON massiv)
+  @IsOptional()
+  @IsString()
+  imageUrls?: string;
 }
 
 export class UpdateMaterialDto {
@@ -43,6 +54,17 @@ export class UpdateMaterialDto {
   @IsOptional()
   @IsString()
   youtubeUrl?: string;
+
+  // Bo'laklab yuklangan video URL'i (VIDEO/UPLOAD uchun)
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  fileUrl?: string;
+
+  // Bo'laklab yuklangan rasmlar URL'lari (IMAGE uchun, JSON massiv)
+  @IsOptional()
+  @IsString()
+  imageUrls?: string;
 }
 
 /** Materiallar ro'yxati uchun filtr (sahifalash + tur + guruh). */

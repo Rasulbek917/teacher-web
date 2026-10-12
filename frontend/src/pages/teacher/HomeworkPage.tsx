@@ -30,17 +30,13 @@ import {
   IconButton,
 } from '../../components/ui';
 import { GradeModal } from '../../components/GradeModal';
-import { fmtDateTime } from '../../lib/format';
+import { fmtDateTime, datetimeLocalFromIso, isoFromDatetimeLocal } from '../../lib/format';
+import { uploadFileChunked } from '../../lib/upload';
 import { homeworkStatusMeta, submissionStatusMeta } from '../../lib/homeworkStatus';
 import type { GroupOption, HomeworkItem, HomeworkSubmissions, Paginated, Submission } from '../../lib/types';
 
 const emptyForm = { groupId: '', title: '', description: '', dueAt: '' };
 const ACCEPT = 'image/*,video/*,application/pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt';
-
-function toInputValue(iso: string): string {
-  // UTC -> Asia/Tashkent (+5) devor vaqti
-  return new Date(new Date(iso).getTime() - 5 * 60 * 60 * 1000).toISOString().slice(0, 16);
-}
 
 export function HomeworkPage() {
   const { t } = useI18n();
@@ -135,7 +131,7 @@ export function HomeworkPage() {
       groupId: h.groupId,
       title: h.title,
       description: h.description ?? '',
-      dueAt: h.dueAt ? toInputValue(h.dueAt) : '',
+      dueAt: h.dueAt ? datetimeLocalFromIso(h.dueAt) : '',
     });
     setNewFiles([]);
     setExistingUrls(h.attachmentUrls ?? []);
@@ -153,16 +149,28 @@ export function HomeworkPage() {
     if (!form.groupId) return toast(t('needGroup'), 'error');
     if (!form.title.trim()) return toast(t('needTitle'), 'error');
 
-    const fd = new FormData();
-    if (!editing) fd.append('groupId', form.groupId);
-    fd.append('title', form.title.trim());
-    fd.append('description', form.description.trim());
-    fd.append('dueAt', form.dueAt ? new Date(form.dueAt).toISOString() : '');
-    if (editing) fd.append('keepAttachmentUrls', JSON.stringify(keepUrls));
-    newFiles.forEach((f) => fd.append('files', f));
-
     setSaving(true);
     try {
+      // Yangi fayllar avval bo'laklab yuklanadi (Vercel 4.5MB limitini chetlab
+      // o'tish uchun), so'ng ularning URL'lari vazifaga biriktiriladi.
+      const attachmentUrls: string[] = [];
+      for (const f of newFiles) {
+        const res = await uploadFileChunked(f, {
+          kind: 'attachment',
+          scope: 'GROUP',
+          scopeId: form.groupId,
+        });
+        attachmentUrls.push(res.url);
+      }
+
+      const fd = new FormData();
+      if (!editing) fd.append('groupId', form.groupId);
+      fd.append('title', form.title.trim());
+      fd.append('description', form.description.trim());
+      fd.append('dueAt', isoFromDatetimeLocal(form.dueAt) ?? '');
+      if (editing) fd.append('keepAttachmentUrls', JSON.stringify(keepUrls));
+      if (attachmentUrls.length) fd.append('attachmentUrls', JSON.stringify(attachmentUrls));
+
       if (editing) {
         await api.patch(`/homework/${editing.id}`, fd);
         toast(t('save') + ': ' + t('success'));

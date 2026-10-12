@@ -165,6 +165,9 @@ export const en: UzDict = {
   oldPassword: 'Old password',
   newPassword: 'New password',
   uploadAvatar: 'Upload profile photo',
+  online: 'Online',
+  offline: 'Offline',
+  roleAdmin: 'Administrator',
 
   myHome: 'Home',
   myGroup: 'My group and schedule',

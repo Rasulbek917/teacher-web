@@ -375,6 +375,8 @@ export interface ChatUser {
   lastName: string;
   avatarUrl: string | null;
   role?: Role;
+  /** Hozir online (socket ulangan)mi. */
+  online?: boolean;
 }
 export interface ChatMessage {
   id: string;
@@ -410,6 +412,8 @@ export interface Contact {
   firstName: string;
   lastName: string;
   avatarUrl: string | null;
+  /** Hozir online (socket ulangan)mi. */
+  online?: boolean;
 }
 export interface UploadResult {
   id: string;

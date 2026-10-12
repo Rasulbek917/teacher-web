@@ -1,21 +1,32 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
   Get,
   NotFoundException,
   Param,
+  Post,
   Query,
   Req,
   Res,
   UnauthorizedException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtService } from '@nestjs/jwt';
 import { Readable } from 'stream';
 import { Request, Response } from 'express';
-import { Role } from '@prisma/client';
-import { FilesService } from './files.service';
+import { FileScope, Role } from '@prisma/client';
+import { FilesService, UploadKind } from './files.service';
 import { getBlobStream } from './blob.storage';
 import { Public } from '../common/decorators/public.decorator';
+import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { chunkMulterOptions } from './multer.config';
+
+/** Vercel proksi ~4.5MB so'rov limitidan kichik bo'lak chegarasi. */
+const CHUNK_MAX_MB = 4;
 
 @Controller('files')
 export class FilesController {
@@ -62,6 +73,48 @@ export class FilesController {
     } catch {
       throw new UnauthorizedException('Token yaroqsiz');
     }
+  }
+
+  /**
+   * Bo'laklangan yuklash. Vercel proksi bitta so'rovda ~4.5MB dan katta
+   * body'ni qabul qilmaydi, shuning uchun katta fayllar bo'laklab yuboriladi.
+   * Har bir bo'lak alohida multipart so'rov (≤ 4MB); so'nggi bo'lakda fayl
+   * yig'ilib saqlanadi va `{ ok, file }` qaytariladi.
+   */
+  @Post('upload')
+  @UseInterceptors(FileInterceptor('file', chunkMulterOptions(CHUNK_MAX_MB)))
+  async uploadChunk(
+    @CurrentUser() user: AuthUser,
+    @Body()
+    body: {
+      uploadId?: string;
+      chunkIndex?: string;
+      totalChunks?: string;
+      filename?: string;
+      mimeType?: string;
+      size?: string;
+      kind?: string;
+      scope?: string;
+      scopeId?: string;
+    },
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file?.buffer) throw new BadRequestException("Fayl bo'lagi yuklanmadi");
+    const result = await this.files.addChunk(user.id, user.role, {
+      uploadId: body.uploadId || '',
+      chunkIndex: parseInt(body.chunkIndex || '', 10),
+      totalChunks: parseInt(body.totalChunks || '', 10),
+      filename: body.filename || 'fayl',
+      mimeType: body.mimeType || 'application/octet-stream',
+      size: parseInt(body.size || '', 10),
+      kind: (body.kind || 'file') as UploadKind,
+      scope: (body.scope || 'GROUP') as FileScope,
+      scopeId: body.scopeId || null,
+    }, file.buffer);
+    if (result.done) {
+      return { ok: true, done: true, file: result.file };
+    }
+    return { ok: true, done: false };
   }
 
   @Public()

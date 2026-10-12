@@ -35,13 +35,20 @@ export class ChatController {
   ) {}
 
   @Get('conversations')
-  conversations(@CurrentUser() user: AuthUser) {
-    return this.chat.listConversations(user.id);
+  async conversations(@CurrentUser() user: AuthUser) {
+    const list = await this.chat.listConversations(user.id);
+    // Presence: DIRECT suhbatda boshqa foydalanuvchining online holatini qo'shamiz.
+    return list.map((c) =>
+      c.otherUser
+        ? { ...c, otherUser: { ...c.otherUser, online: this.realtime.isOnline(c.otherUser.id) } }
+        : c,
+    );
   }
 
   @Get('contacts')
-  contacts(@CurrentUser() user: AuthUser) {
-    return this.chat.contacts(user.id, user.role);
+  async contacts(@CurrentUser() user: AuthUser) {
+    const list = await this.chat.contacts(user.id, user.role);
+    return list.map((c) => ({ ...c, online: this.realtime.isOnline(c.id) }));
   }
 
   @Post('direct')

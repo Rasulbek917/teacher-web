@@ -119,4 +119,31 @@ export function isValidPhone(v: string): boolean {
   return PHONE_RE.test(v);
 }
 
+/** `YYYY-MM-DD HH:mm` kabi datetime-local kiritish maydonidagi Toshkent vaqti (UTC+5). */
+const DT_LOCAL_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+
+/**
+ * ISO (UTC) instansini `datetime-local` input qiymatiga o'tkazadi.
+ * Qiymat DOIMO Tashkent devor vaqti bo'lib ko'rsatiladi — brauzer/kompyuter
+ * soati qaysi mintaqada bo'lishidan qat'i nazar (muddat "xaotik" bo'lmasligi uchun).
+ */
+export function datetimeLocalFromIso(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const t = shifted(iso);
+  return `${t.getUTCFullYear()}-${pad(t.getUTCMonth() + 1)}-${pad(t.getUTCDate())}T${pad(
+    t.getUTCHours(),
+  )}:${pad(t.getUTCMinutes())}`;
+}
+
+/**
+ * `datetime-local` qiymatini (Toshkent devor vaqti sifatida talqin qilinadi)
+ * ISO UTC instansiga o'tkazadi. Bo'sh qiymat uchun `null` qaytaradi.
+ */
+export function isoFromDatetimeLocal(v: string | null | undefined): string | null {
+  if (!v) return null;
+  const m = DT_LOCAL_RE.exec(v.trim());
+  if (!m) return null;
+  return new Date(`${v.trim()}:00+05:00`).toISOString();
+}
+
 export { shifted };

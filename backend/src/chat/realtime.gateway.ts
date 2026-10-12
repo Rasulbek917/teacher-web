@@ -37,6 +37,9 @@ export class RealtimeGateway
 {
   private readonly logger = new Logger('RealtimeGateway');
 
+  /** Online foydalanuvchilar: userId -> ochiq socketlar soni (multi-tab). */
+  private readonly onlineCounts = new Map<string, number>();
+
   @WebSocketServer()
   server: Server;
 
@@ -97,13 +100,45 @@ export class RealtimeGateway
         select: { conversationId: true },
       });
       for (const p of parts) await client.join(`conv:${p.conversationId}`);
+
+      // Presence: birinchi socket ochilganda online deb belgilaymiz.
+      const prev = this.onlineCounts.get(user.id) || 0;
+      this.onlineCounts.set(user.id, prev + 1);
+      client.emit('presence:init', this.onlineUserIds());
+      if (prev === 0) {
+        this.server?.emit('presence:update', { userId: user.id, online: true });
+      }
     } catch (e) {
       client.disconnect();
     }
   }
 
-  handleDisconnect(_client: Socket) {
-    // hech narsa
+  handleDisconnect(client: Socket) {
+    const userId = client.data?.userId as string | undefined;
+    if (!userId) return;
+    const next = (this.onlineCounts.get(userId) || 1) - 1;
+    if (next <= 0) {
+      this.onlineCounts.delete(userId);
+      if (this.server) {
+        this.server.emit('presence:update', { userId, online: false });
+      }
+    } else {
+      this.onlineCounts.set(userId, next);
+    }
+  }
+
+  /** Foydalanuvchi hozir online (kamida bitta ochiq socketi bor)mi? */
+  isOnline(userId: string): boolean {
+    return (this.onlineCounts.get(userId) || 0) > 0;
+  }
+
+  /** Hozir online bo'lgan barcha foydalanuvchi id'lari. */
+  onlineUserIds(): string[] {
+    const ids: string[] = [];
+    for (const [id, count] of this.onlineCounts) {
+      if (count > 0) ids.push(id);
+    }
+    return ids;
   }
 
   emitToUser(userId: string, event: string, payload: any) {

@@ -53,6 +53,40 @@ export class HomeworkService {
     return urls;
   }
 
+  /**
+   * Bo'laklab yuklangan biriktirma URL'larini (JSON massiv) tekshirib oladi.
+   * Har bir URL shu o'qituvchi shu guruhga yuklagan haqiqiy fayl bo'lishi
+   * shart — aks holda 400 qaytaramiz (begona faylni biriktirib bo'lmaydi).
+   */
+  private async resolveGroupAttachmentUrls(
+    raw: string | undefined,
+    groupId: string,
+    ownerId: string,
+  ): Promise<string[]> {
+    if (!raw) return [];
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new BadRequestException("Biriktirma URL'lari noto'g'ri formatda");
+    }
+    if (!Array.isArray(parsed)) {
+      throw new BadRequestException("Biriktirma URL'lari noto'g'ri formatda");
+    }
+    const urls: string[] = [];
+    for (const u of parsed) {
+      if (typeof u !== 'string' || u.length > 500) {
+        throw new BadRequestException("Biriktirma URL'lari noto'g'ri formatda");
+      }
+      const owned = await this.files.isOwnedGroupFile(u, groupId, ownerId);
+      if (!owned) {
+        throw new BadRequestException('Biriktirma fayli bu guruhga tegishli emas');
+      }
+      urls.push(u);
+    }
+    return urls;
+  }
+
   // ---------------- Teacher ----------------
   async list(teacherId: string, query: any) {
     const { page, pageSize, skip, take, search } = getPagination(query);
@@ -118,7 +152,14 @@ export class HomeworkService {
     files?: Express.Multer.File[],
   ) {
     await this.access.assertTeacherOwnsGroup(teacherId, dto.groupId);
-    const attachmentUrls = await this.saveAttachments(files, dto.groupId, teacherId);
+    // URL'lar avval tekshiriladi, keyin multipart fayllar saqlanadi.
+    const byUrls = await this.resolveGroupAttachmentUrls(
+      dto.attachmentUrls,
+      dto.groupId,
+      teacherId,
+    );
+    const byFiles = await this.saveAttachments(files, dto.groupId, teacherId);
+    const attachmentUrls = [...byUrls, ...byFiles];
     return this.prisma.homework.create({
       data: {
         groupId: dto.groupId,
@@ -163,8 +204,13 @@ export class HomeworkService {
       if (removed.length) await this.files.removeManyByUrls(removed);
       attachments = keep;
     }
-    const added = await this.saveAttachments(files, homework.groupId, teacherId);
-    data.attachmentUrls = [...attachments, ...added];
+    const byUrls = await this.resolveGroupAttachmentUrls(
+      dto.attachmentUrls,
+      homework.groupId,
+      teacherId,
+    );
+    const byFiles = await this.saveAttachments(files, homework.groupId, teacherId);
+    data.attachmentUrls = [...attachments, ...byUrls, ...byFiles];
 
     return this.prisma.homework.update({ where: { id }, data });
   }
@@ -270,6 +316,7 @@ export class HomeworkService {
     homeworkId: string,
     text: string | undefined,
     file?: Express.Multer.File,
+    fileUrl?: string,
   ) {
     const homework = await this.prisma.homework.findUnique({
       where: { id: homeworkId },
@@ -287,7 +334,7 @@ export class HomeworkService {
     // Bo'sh javob (na matn, na fayl) yuborilmasin. Qayta topshirishda eski
     // matn/fayl saqlanib qolsa ham bo'sh hisoblanmaydi.
     const hasExistingContent = !!(existing?.text || existing?.fileUrl);
-    if (!text?.trim() && !file && !hasExistingContent) {
+    if (!text?.trim() && !file && !fileUrl && !hasExistingContent) {
       throw new BadRequestException('Javob matni yoki fayl kerak');
     }
 
@@ -297,7 +344,7 @@ export class HomeworkService {
         ? SubmissionStatus.LATE
         : SubmissionStatus.SUBMITTED;
 
-    let fileUrl = existing?.fileUrl ?? null;
+    let newFileUrl = existing?.fileUrl ?? null;
     if (file) {
       const saved = await this.files.save(
         file,
@@ -307,7 +354,21 @@ export class HomeworkService {
         studentId,
       );
       if (existing?.fileUrl) await this.files.removeByUrl(existing.fileUrl);
-      fileUrl = saved.url;
+      newFileUrl = saved.url;
+    } else if (fileUrl) {
+      // Bo'laklab yuklangan fayl shu o'quvchiga va shu guruhga tegishli bo'lishi shart.
+      const owned = await this.files.isOwnedSubmissionFile(
+        fileUrl,
+        homework.groupId,
+        studentId,
+      );
+      if (!owned) {
+        throw new BadRequestException("Fayl bu topshiriqqa tegishli emas");
+      }
+      if (existing?.fileUrl && existing.fileUrl !== fileUrl) {
+        await this.files.removeByUrl(existing.fileUrl);
+      }
+      newFileUrl = fileUrl;
     }
 
     // text berilmagan bo'lsa mavjud matn saqlanadi (bo'sh matn uni o'chirmaydi).
@@ -320,11 +381,11 @@ export class HomeworkService {
         homeworkId,
         studentId,
         text: newText,
-        fileUrl,
+        fileUrl: newFileUrl,
         status,
         submittedAt: now,
       },
-      update: { text: newText, fileUrl, status, submittedAt: now },
+      update: { text: newText, fileUrl: newFileUrl, status, submittedAt: now },
     });
 
     // O'qituvchiga bildirishnoma

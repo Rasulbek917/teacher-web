@@ -19,6 +19,7 @@ import {
 } from '../../components/ui';
 import { VideoPlayer, youtubeEmbed } from '../../components/VideoPlayer';
 import { fmtDate } from '../../lib/format';
+import { uploadFileChunked } from '../../lib/upload';
 import type { GroupOption, MaterialItem, Paginated } from '../../lib/types';
 
 export function MaterialsPage() {
@@ -125,23 +126,46 @@ export function MaterialsPage() {
       return;
     }
 
-    const fd = new FormData();
-    fd.append('groupId', form.groupId);
-    fd.append('title', form.title.trim());
-    if (form.description) fd.append('description', form.description);
-    if (!editing) {
-      fd.append('type', form.type);
-      if (form.type === 'VIDEO') {
-        fd.append('videoSource', form.videoSource);
-        if (form.videoSource === 'YOUTUBE') fd.append('youtubeUrl', form.youtubeUrl.trim());
-      }
-    } else if (form.type === 'VIDEO' && form.videoSource === 'YOUTUBE') {
-      fd.append('youtubeUrl', form.youtubeUrl.trim());
-    }
-    files.forEach((f) => fd.append('files', f));
-
     setSaving(true);
     try {
+      // Fayllar avval bo'laklab yuklanadi (Vercel 4.5MB so'rov limitini chetlab
+      // o'tish uchun), so'ng ularning URL'lari materialga biriktiriladi.
+      let videoUrl: string | null = null;
+      const imageUrls: string[] = [];
+      if (form.type === 'VIDEO' && form.videoSource === 'UPLOAD' && files.length > 0) {
+        const res = await uploadFileChunked(files[0], {
+          kind: 'video',
+          scope: 'GROUP',
+          scopeId: form.groupId,
+        });
+        videoUrl = res.url;
+      } else if (form.type === 'IMAGE') {
+        for (const f of files) {
+          const res = await uploadFileChunked(f, {
+            kind: 'image',
+            scope: 'GROUP',
+            scopeId: form.groupId,
+          });
+          imageUrls.push(res.url);
+        }
+      }
+
+      const fd = new FormData();
+      fd.append('groupId', form.groupId);
+      fd.append('title', form.title.trim());
+      if (form.description) fd.append('description', form.description);
+      if (!editing) {
+        fd.append('type', form.type);
+        if (form.type === 'VIDEO') {
+          fd.append('videoSource', form.videoSource);
+          if (form.videoSource === 'YOUTUBE') fd.append('youtubeUrl', form.youtubeUrl.trim());
+        }
+      } else if (form.type === 'VIDEO' && form.videoSource === 'YOUTUBE') {
+        fd.append('youtubeUrl', form.youtubeUrl.trim());
+      }
+      if (videoUrl) fd.append('fileUrl', videoUrl);
+      if (imageUrls.length) fd.append('imageUrls', JSON.stringify(imageUrls));
+
       if (editing) {
         await api.patch(`/materials/${editing.id}`, fd);
         toast(t('edit') + ': ' + t('success'));

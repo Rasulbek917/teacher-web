@@ -27,6 +27,7 @@ import {
   Modal,
   ConfirmDialog,
   Avatar,
+  Badge,
   Spinner,
   ErrorState,
   EmptyState,
@@ -34,7 +35,8 @@ import {
 } from '../components/ui';
 import { VideoPlayer } from '../components/VideoPlayer';
 import { fmtTime, fmtDate } from '../lib/format';
-import type { ChatMessage, Contact, ConversationItem, MessageType } from '../lib/types';
+import { uploadFileChunked } from '../lib/upload';
+import type { ChatMessage, ChatUser, Contact, ConversationItem, MessageType } from '../lib/types';
 
 export function ChatPage() {
   const { user } = useAuth();
@@ -59,6 +61,11 @@ export function ChatPage() {
 
   const [contactsOpen, setContactsOpen] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
+
+  // Presence: online foydalanuvchilar to'plami (socket orqali yangilanadi).
+  const [onlineUsers, setOnlineUsers] = useState<Set<string>>(new Set());
+  // Profil oynasi: avatar/ism bosilganda ochiladi.
+  const [viewUser, setViewUser] = useState<ChatUser | null>(null);
 
   const [preview, setPreview] = useState<string | null>(null);
 
@@ -87,21 +94,24 @@ export function ChatPage() {
   }, [loadConvs]);
 
   const loadMessages = useCallback(
-    async (id: string) => {
-      setLoadingMsgs(true);
+    async (id: string, silent = false) => {
+      if (!silent) setLoadingMsgs(true);
       try {
         const { data } = await api.get(`/chat/conversations/${id}/messages`, { params: { limit: 100 } });
         setMessages(data);
         api.post(`/chat/conversations/${id}/read`).catch(() => {});
         setConvs((prev) => prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)));
       } catch (e: any) {
-        toast(errMsg(e), 'error');
+        if (!silent) toast(errMsg(e), 'error');
       } finally {
-        setLoadingMsgs(false);
+        if (!silent) setLoadingMsgs(false);
       }
     },
     [toast],
   );
+
+  /** Foydalanuvchi online (kamida bitta socket ulangan)mi. */
+  const isOnline = useCallback((id?: string | null) => (id ? onlineUsers.has(id) : false), [onlineUsers]);
 
   const openConversation = (id: string) => {
     setActiveId(id);
@@ -165,17 +175,65 @@ export function ChatPage() {
         ),
       );
     };
+    // Presence: dastlabki ro'yxat va keyingi o'zgarishlar.
+    const onPresenceInit = (ids: string[]) => setOnlineUsers(new Set(Array.isArray(ids) ? ids : []));
+    const onPresenceUpdate = (p: { userId: string; online: boolean }) => {
+      setOnlineUsers((prev) => {
+        const next = new Set(prev);
+        if (p.online) next.add(p.userId);
+        else next.delete(p.userId);
+        return next;
+      });
+    };
+    // Socket (qayta) ulanganda suhbatlar va ochiq xabarlarni yangilaymiz —
+    // bu "xabar turib qolishi" muammosini bartaraf etadi.
+    const onConnect = () => {
+      loadConvs();
+      if (activeIdRef.current) loadMessages(activeIdRef.current, true);
+    };
     socket.on('message:new', onNew);
     socket.on('message:updated', onUpdated);
     socket.on('message:deleted', onDeleted);
     socket.on('message:read', onRead);
+    socket.on('presence:init', onPresenceInit);
+    socket.on('presence:update', onPresenceUpdate);
+    socket.on('connect', onConnect);
     return () => {
       socket.off('message:new', onNew);
       socket.off('message:updated', onUpdated);
       socket.off('message:deleted', onDeleted);
       socket.off('message:read', onRead);
+      socket.off('presence:init', onPresenceInit);
+      socket.off('presence:update', onPresenceUpdate);
+      socket.off('connect', onConnect);
     };
   }, [socket, user?.id, loadConvs, loadMessages]);
+
+  // Oyna fokusga qaytganda va tarmoq tiklanganda ma'lumotni yangilaymiz.
+  useEffect(() => {
+    const refresh = () => {
+      loadConvs();
+      if (activeIdRef.current) loadMessages(activeIdRef.current, true);
+    };
+    window.addEventListener('focus', refresh);
+    window.addEventListener('online', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      window.removeEventListener('online', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [loadConvs, loadMessages]);
+
+  // Socket uzilgan bo'lsa — zaxira (fallback) so'rov bilan yangilab turamiz.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (socket?.connected) return;
+      loadConvs();
+      if (activeIdRef.current) loadMessages(activeIdRef.current, true);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [socket, loadConvs, loadMessages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -202,10 +260,12 @@ export function ChatPage() {
     if (!activeId) return;
     setUploading(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('kind', kind.toLowerCase());
-      const { data: up } = await api.post(`/chat/conversations/${activeId}/upload`, fd);
+      // Chat fayllari ham bo'laklab yuklanadi (Vercel 4.5MB so'rov limiti).
+      const up = await uploadFileChunked(file, {
+        kind: kind === 'IMAGE' ? 'image' : kind === 'VIDEO' ? 'video' : kind === 'VOICE' ? 'voice' : 'file',
+        scope: 'CONVERSATION',
+        scopeId: activeId,
+      });
       const { data } = await api.post(`/chat/conversations/${activeId}/messages`, {
         type: kind,
         fileUrl: up.url,
@@ -274,7 +334,17 @@ export function ChatPage() {
     const seen = mine && m.readBy.length > 0;
     return (
       <div key={m.id} className={cx('flex gap-2', mine ? 'justify-end' : 'justify-start')}>
-        {!mine && <Avatar url={m.sender.avatarUrl} name={`${m.sender.firstName} ${m.sender.lastName}`} size="xs" className="mt-1" />}
+        {!mine && (
+          <button
+            type="button"
+            onClick={() => setViewUser(m.sender)}
+            className="relative mt-1 shrink-0"
+            title={`${m.sender.firstName} ${m.sender.lastName}`}
+          >
+            <Avatar url={m.sender.avatarUrl} name={`${m.sender.firstName} ${m.sender.lastName}`} size="xs" />
+            <OnlineDot online={isOnline(m.senderId)} />
+          </button>
+        )}
         <div className={cx('max-w-[78%]', mine ? 'items-end' : 'items-start')}>
           {!mine && active?.type === 'GROUP' && (
             <div className="mb-0.5 pl-1 text-[11px] font-medium text-primary-500">
@@ -376,11 +446,14 @@ export function ChatPage() {
                   )}
                 >
                   {c.type === 'GROUP' ? (
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300">
+                    <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-primary-100 text-primary-600 dark:bg-primary-900/40 dark:text-primary-300">
                       <Users className="h-5 w-5" />
                     </div>
                   ) : (
-                    <Avatar url={c.avatarUrl} name={c.title} size="sm" />
+                    <div className="relative shrink-0">
+                      <Avatar url={c.avatarUrl} name={c.title} size="sm" />
+                      <OnlineDot online={isOnline(c.otherUser?.id)} />
+                    </div>
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2">
@@ -438,9 +511,29 @@ export function ChatPage() {
                     <Users className="h-5 w-5" />
                   </div>
                 ) : (
-                  <Avatar url={active.avatarUrl} name={active.title} size="sm" />
+                  <button
+                    type="button"
+                    onClick={() => active.otherUser && setViewUser(active.otherUser)}
+                    className="relative shrink-0"
+                  >
+                    <Avatar url={active.avatarUrl} name={active.title} size="sm" />
+                    <OnlineDot online={isOnline(active.otherUser?.id)} />
+                  </button>
                 )}
-                <span className="font-semibold text-slate-800 dark:text-slate-100">{active.title}</span>
+                {active.type === 'DIRECT' && active.otherUser ? (
+                  <button
+                    type="button"
+                    onClick={() => active.otherUser && setViewUser(active.otherUser)}
+                    className="min-w-0 text-left"
+                  >
+                    <div className="truncate font-semibold text-slate-800 dark:text-slate-100">{active.title}</div>
+                    <div className={cx('text-xs', isOnline(active.otherUser.id) ? 'text-emerald-500' : 'text-slate-400')}>
+                      {isOnline(active.otherUser.id) ? t('online') : t('offline')}
+                    </div>
+                  </button>
+                ) : (
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">{active.title}</span>
+                )}
               </div>
 
               <div className="flex-1 space-y-3 overflow-y-auto p-3" style={{ minHeight: '45vh', maxHeight: '60vh' }}>
@@ -546,12 +639,53 @@ export function ChatPage() {
                 onClick={() => startDirect(c)}
                 className="flex w-full items-center gap-3 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50"
               >
-                <Avatar url={c.avatarUrl} name={`${c.firstName} ${c.lastName}`} size="sm" />
-                <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                  {c.firstName} {c.lastName}
+                <div className="relative shrink-0">
+                  <Avatar url={c.avatarUrl} name={`${c.firstName} ${c.lastName}`} size="sm" />
+                  <OnlineDot online={isOnline(c.id)} />
+                </div>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {c.firstName} {c.lastName}
+                  </span>
+                  <span className={cx('text-xs', isOnline(c.id) ? 'text-emerald-500' : 'text-slate-400')}>
+                    {isOnline(c.id) ? t('online') : t('offline')}
+                  </span>
                 </span>
               </button>
             ))}
+          </div>
+        )}
+      </Modal>
+
+      {/* Profile (avatar/ism bosilganda) */}
+      <Modal open={!!viewUser} onClose={() => setViewUser(null)} size="sm" title={t('profile')}>
+        {viewUser && (
+          <div className="flex flex-col items-center gap-3 py-2 text-center">
+            <div className="relative">
+              <Avatar
+                url={viewUser.avatarUrl}
+                name={`${viewUser.firstName} ${viewUser.lastName}`}
+                size="xl"
+              />
+              <OnlineDot online={isOnline(viewUser.id)} className="h-5 w-5 border-4" />
+            </div>
+            <div>
+              <div className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+                {viewUser.firstName} {viewUser.lastName}
+              </div>
+              <div className={cx('text-sm', isOnline(viewUser.id) ? 'text-emerald-500' : 'text-slate-400')}>
+                {isOnline(viewUser.id) ? t('online') : t('offline')}
+              </div>
+            </div>
+            {viewUser.role && (
+              <Badge color="indigo">
+                {viewUser.role === 'TEACHER'
+                  ? t('teacher')
+                  : viewUser.role === 'STUDENT'
+                    ? t('student')
+                    : t('roleAdmin')}
+              </Badge>
+            )}
           </div>
         )}
       </Modal>
@@ -612,5 +746,19 @@ function MicUpload({ onUpload, t }: { onUpload: (file: File) => void; t: (k: str
     >
       <Mic className="h-5 w-5" />
     </button>
+  );
+}
+
+/** Avatar burchagidagi online/offline holat nuqtasi. */
+function OnlineDot({ online, className }: { online: boolean; className?: string }) {
+  return (
+    <span
+      className={cx(
+        'absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white dark:border-slate-900',
+        online ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600',
+        className,
+      )}
+      aria-hidden
+    />
   );
 }

@@ -7,11 +7,17 @@ import axios, { AxiosError } from 'axios';
  *   (same-origin). Bo'sh satrda `axios` `baseURL` = `/api` bo'ladi va so'rovlar
  *   joriy domenga ketadi — Vercel'dagi `/api` rewrite ularni backendga uzatadi.
  */
-const rawApiUrl = import.meta.env?.VITE_API_URL as string | undefined;
+const rawApiUrl = (import.meta.env?.VITE_API_URL as string | undefined)?.trim();
+const isDev = !!import.meta.env?.DEV;
+/** Lokal manzilmi (localhost / 127.0.0.1). */
+const isLocalUrl = (u: string) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i.test(u);
 export const API_URL: string =
-  rawApiUrl != null && rawApiUrl !== ''
+  // Muhim: production build hech qachon lokal manzilga murojaat qilmasin.
+  // Aks holda (masalan, `.env` orqali) `localhost:3000` bundle'ga qotib qolib,
+  // saytda CORS / network error beradi.
+  rawApiUrl && rawApiUrl !== '' && (!import.meta.env?.PROD || !isLocalUrl(rawApiUrl))
     ? rawApiUrl.replace(/\/+$/, '')
-    : import.meta.env?.DEV
+    : isDev
       ? 'http://localhost:3000'
       : '';
 

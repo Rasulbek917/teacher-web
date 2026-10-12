@@ -7,11 +7,10 @@ import {
   Patch,
   Post,
   Query,
-  UploadedFile,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
 import { HomeworkService } from './homework.service';
 import {
@@ -22,7 +21,7 @@ import {
 } from './dto/homework.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
-import { multerOptions, uploadMaxMb } from '../files/multer.config';
+import { multerOptions } from '../files/multer.config';
 
 @Roles(Role.TEACHER)
 @Controller('homework')
@@ -77,13 +76,11 @@ export class StudentHomeworkController {
   }
 
   @Post(':id/submit')
-  @UseInterceptors(FileInterceptor('file', multerOptions(uploadMaxMb.file)))
   submit(
     @CurrentUser() user: AuthUser,
     @Param('id') id: string,
     @Body() dto: SubmitHomeworkDto,
-    @UploadedFile() file: Express.Multer.File,
   ) {
-    return this.homework.submit(user.id, id, dto.text, file);
+    return this.homework.submit(user.id, id, dto.text, undefined, dto.fileUrl);
   }
 }

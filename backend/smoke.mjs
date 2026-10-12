@@ -173,6 +173,116 @@ async function main() {
     `${r.status} ${JSON.stringify(r.data)}`,
   );
 
+  // --- chunked upload (Vercel 4.5MB limitini chetlab o'tuvchi yo'l) ---
+  const chunkFd = new FormData();
+  chunkFd.append('uploadId', `upload_${uniq}`);
+  chunkFd.append('chunkIndex', '0');
+  chunkFd.append('totalChunks', '1');
+  chunkFd.append('filename', 'chunk-notes.txt');
+  chunkFd.append('mimeType', 'text/plain');
+  chunkFd.append('size', String(new Blob(['chunked content here']).size));
+  chunkFd.append('kind', 'attachment');
+  chunkFd.append('scope', 'GROUP');
+  chunkFd.append('scopeId', groupId);
+  chunkFd.append('file', new Blob(['chunked content here'], { type: 'text/plain' }), 'chunk.bin');
+  r = await req('POST', '/files/upload', { token: tToken, form: chunkFd });
+  ok(
+    'chunked file upload (single chunk) returns file',
+    (r.status === 201 || r.status === 200) && !!r.data?.file?.url,
+    `${r.status} ${JSON.stringify(r.data)}`,
+  );
+  const chunkUrl = r.data?.file?.url;
+
+  // --- MULTI-chunk upload: bo'laklar umumiy saqlashda (disk/Blob) yig'ilishi
+  //     kerak. Vercel'da har bir so'rov boshqa nusxaga tushishi mumkin, shuning
+  //     uchun bo'laklarni jarayon xotirasida saqlab bo'lmaydi. ---
+  {
+    const SIZE = 8 * 1024 * 1024;
+    const CH = 3.5 * 1024 * 1024;
+    const total = Math.ceil(SIZE / CH);
+    const uploadId = `multi${uniq}`;
+    const full = Buffer.alloc(SIZE, 0x41);
+    full.write('BEGIN', 0);
+    full.write('__FIN', SIZE - 5);
+    let fileRec = null;
+    let midReturnedFile = false;
+    for (let i = 0; i < total; i++) {
+      const part = full.subarray(i * CH, Math.min(SIZE, (i + 1) * CH));
+      const fd = new FormData();
+      fd.append('uploadId', uploadId);
+      fd.append('chunkIndex', String(i));
+      fd.append('totalChunks', String(total));
+      fd.append('filename', 'multi.pdf');
+      fd.append('mimeType', 'application/pdf');
+      fd.append('size', String(SIZE));
+      fd.append('kind', 'attachment');
+      fd.append('scope', 'GROUP');
+      fd.append('scopeId', groupId);
+      fd.append('file', new Blob([part], { type: 'application/pdf' }), `c${i}.part`);
+      r = await req('POST', '/files/upload', { token: tToken, form: fd });
+      if (i < total - 1 && r.data?.file) midReturnedFile = true;
+      if (r.data?.file) fileRec = r.data.file;
+    }
+    ok('multi-chunk: intermediate chunks do not finish upload', !midReturnedFile, `total=${total}`);
+    ok(
+      'multi-chunk upload assembles full file',
+      !!fileRec?.url && fileRec.size === SIZE,
+      `${JSON.stringify(fileRec)}`,
+    );
+    if (fileRec?.url) {
+      const origin = BASE.replace(/\/api$/, '');
+      const dl = await fetch(origin + fileRec.url, {
+        headers: { Authorization: `Bearer ${tToken}` },
+      });
+      const buf = Buffer.from(await dl.arrayBuffer());
+      ok(
+        'multi-chunk assembled content intact',
+        dl.status === 200 &&
+          buf.length === SIZE &&
+          buf.subarray(0, 5).toString() === 'BEGIN' &&
+          buf.subarray(SIZE - 5).toString() === '__FIN',
+        `status=${dl.status} len=${buf.length}`,
+      );
+    }
+  }
+
+  // homework create with pre-uploaded attachmentUrls (JSON text field)
+  const hfd = new FormData();
+  hfd.append('groupId', groupId);
+  hfd.append('title', `ChunkedHW ${uniq}`);
+  hfd.append('attachmentUrls', JSON.stringify([chunkUrl]));
+  r = await req('POST', '/homework', { token: tToken, form: hfd });
+  ok(
+    'homework create via attachmentUrls',
+    (r.status === 201 || r.status === 200) &&
+      Array.isArray(r.data?.attachmentUrls) &&
+      r.data?.attachmentUrls?.includes(chunkUrl),
+    `${r.status} ${JSON.stringify(r.data)}`,
+  );
+
+  // foreign/unowned attachmentUrl must be rejected
+  const ffd = new FormData();
+  ffd.append('groupId', groupId);
+  ffd.append('title', `ForeignHW ${uniq}`);
+  ffd.append('attachmentUrls', JSON.stringify(['/api/files/not-a-real-id']));
+  r = await req('POST', '/homework', { token: tToken, form: ffd });
+  ok('homework foreign attachmentUrl rejected (400)', r.status === 400, `status=${r.status} ${JSON.stringify(r.data)}`);
+
+  // student cannot upload to a teacher's group (scope=GROUP requires teacher)
+  const badChunk = new FormData();
+  badChunk.append('uploadId', `bad_${uniq}`);
+  badChunk.append('chunkIndex', '0');
+  badChunk.append('totalChunks', '1');
+  badChunk.append('filename', 'x.txt');
+  badChunk.append('mimeType', 'text/plain');
+  badChunk.append('size', String(new Blob(['x']).size));
+  badChunk.append('kind', 'attachment');
+  badChunk.append('scope', 'GROUP');
+  badChunk.append('scopeId', groupId);
+  badChunk.append('file', new Blob(['x']), 'x.bin');
+  r = await req('POST', '/files/upload', { token: sToken, form: badChunk });
+  ok('student cannot upload teacher group file (403)', r.status === 403, `status=${r.status} ${JSON.stringify(r.data)}`);
+
   // second student for receive + bulk grading
   r = await req('POST', '/students', {
     token: tToken,
@@ -184,6 +294,11 @@ async function main() {
   ok('create second student', (r.status === 201 || r.status === 200) && r.data?.id, `${r.status} ${JSON.stringify(r.data)}`);
   const student2Id = r.data?.id;
 
+  // login as second student (for submission fileUrl test)
+  r = await req('POST', '/auth/login', { body: { login: `stud2_${uniq}`, password: 'student123' } });
+  ok('second student login', ok2(r.status) && !!r.data?.token, `${r.status}`);
+  const s2Token = r.data?.token;
+
   // teacher marks a student's homework as received in class
   r = await req('POST', `/submissions/homework/${hwId}/student/${student2Id}/receive`, { token: tToken });
   ok(
@@ -192,6 +307,28 @@ async function main() {
     `${r.status} ${JSON.stringify(r.data)}`,
   );
   const recId = r.data?.id;
+
+  // student submits a file via chunked upload (scope=SUBMISSION) then fileUrl
+  const subFd = new FormData();
+  subFd.append('uploadId', `sub_${uniq}`);
+  subFd.append('chunkIndex', '0');
+  subFd.append('totalChunks', '1');
+  subFd.append('filename', 'answer.txt');
+  subFd.append('mimeType', 'text/plain');
+  subFd.append('size', String(new Blob(['my answer']).size));
+  subFd.append('kind', 'file');
+  subFd.append('scope', 'SUBMISSION');
+  subFd.append('scopeId', groupId);
+  subFd.append('file', new Blob(['my answer'], { type: 'text/plain' }), 'answer.bin');
+  r = await req('POST', '/files/upload', { token: s2Token, form: subFd });
+  const subAnswerUrl = r.data?.file?.url;
+  ok('student chunk upload for submission (200)', (r.status === 200 || r.status === 201) && !!subAnswerUrl, `${r.status} ${JSON.stringify(r.data)}`);
+  r = await req('POST', `/my/homework/${hwId}/submit`, { token: s2Token, body: { text: 'Updated answer', fileUrl: subAnswerUrl } });
+  ok(
+    'student submits homework with fileUrl',
+    (r.status === 201 || r.status === 200) && r.data?.fileUrl === subAnswerUrl,
+    `${r.status} ${JSON.stringify(r.data)}`,
+  );
 
   // quick grading: bulk review multiple submissions at once
   r = await req('PATCH', '/submissions/bulk-review', {
@@ -237,6 +374,23 @@ async function main() {
     r = await req('GET', `/chat/conversations/${groupConv.id}/messages`, { token: sToken });
     ok('student reads group messages', r.status === 200, `${r.status}`);
   }
+
+  // --- presence: conversations/contacts expose an `online` field ---
+  r = await req('GET', '/chat/conversations', { token: tToken });
+  const convsOnline = r.data?.items || r.data?.data || r.data;
+  ok(
+    'conversations include online flag for otherUser',
+    r.status === 200 &&
+      Array.isArray(convsOnline) &&
+      convsOnline.every((c) => c.otherUser === null || typeof c.otherUser.online === 'boolean'),
+    `${r.status} ${JSON.stringify(r.data).slice(0, 200)}`,
+  );
+  r = await req('GET', '/chat/contacts', { token: tToken });
+  ok(
+    'contacts include online flag',
+    r.status === 200 && Array.isArray(r.data) && r.data.every((c) => typeof c.online === 'boolean'),
+    `${r.status} ${JSON.stringify(r.data).slice(0, 200)}`,
+  );
 
   // --- notifications ---
   r = await req('GET', '/notifications', { token: sToken });
@@ -349,6 +503,66 @@ async function main() {
   // --- materials list tolerates an empty `type` filter (frontend "all" sends type=) ---
   r = await req('GET', '/materials?page=1&pageSize=12&search=&groupId=all&type=', { token: tToken });
   ok('materials list with empty type filter (200)', r.status === 200, `status=${r.status} ${JSON.stringify(r.data)}`);
+
+  // --- materials via chunk-uploaded URLs (frontend's primary path) ---
+  const imgChunk = new FormData();
+  imgChunk.append('uploadId', `mimg_${uniq}`);
+  imgChunk.append('chunkIndex', '0');
+  imgChunk.append('totalChunks', '1');
+  imgChunk.append('filename', 'pic.png');
+  imgChunk.append('mimeType', 'image/png');
+  imgChunk.append('size', String(new Blob(['png-bytes']).size));
+  imgChunk.append('kind', 'image');
+  imgChunk.append('scope', 'GROUP');
+  imgChunk.append('scopeId', groupId);
+  imgChunk.append('file', new Blob(['png-bytes'], { type: 'image/png' }), 'pic.png');
+  r = await req('POST', '/files/upload', { token: tToken, form: imgChunk });
+  const matImgUrl = r.data?.file?.url;
+  const matImgFd = new FormData();
+  matImgFd.append('groupId', groupId);
+  matImgFd.append('title', `MatURL ${uniq}`);
+  matImgFd.append('type', 'IMAGE');
+  matImgFd.append('imageUrls', JSON.stringify([matImgUrl]));
+  r = await req('POST', '/materials', { token: tToken, form: matImgFd });
+  ok(
+    'material image create via imageUrls',
+    (r.status === 201 || r.status === 200) && (r.data?.imageUrls || []).includes(matImgUrl),
+    `${r.status} ${JSON.stringify(r.data)}`,
+  );
+
+  const matImgBadFd = new FormData();
+  matImgBadFd.append('groupId', groupId);
+  matImgBadFd.append('title', `MatBad ${uniq}`);
+  matImgBadFd.append('type', 'IMAGE');
+  matImgBadFd.append('imageUrls', JSON.stringify(['/api/files/not-a-real-id']));
+  r = await req('POST', '/materials', { token: tToken, form: matImgBadFd });
+  ok('material foreign imageUrl rejected (400)', r.status === 400, `status=${r.status} ${JSON.stringify(r.data)}`);
+
+  const vidChunk = new FormData();
+  vidChunk.append('uploadId', `mvid_${uniq}`);
+  vidChunk.append('chunkIndex', '0');
+  vidChunk.append('totalChunks', '1');
+  vidChunk.append('filename', 'clip.mp4');
+  vidChunk.append('mimeType', 'video/mp4');
+  vidChunk.append('size', String(new Blob(['mp4-bytes']).size));
+  vidChunk.append('kind', 'video');
+  vidChunk.append('scope', 'GROUP');
+  vidChunk.append('scopeId', groupId);
+  vidChunk.append('file', new Blob(['mp4-bytes'], { type: 'video/mp4' }), 'clip.mp4');
+  r = await req('POST', '/files/upload', { token: tToken, form: vidChunk });
+  const matVidUrl = r.data?.file?.url;
+  const matVidFd = new FormData();
+  matVidFd.append('groupId', groupId);
+  matVidFd.append('title', `VidURL ${uniq}`);
+  matVidFd.append('type', 'VIDEO');
+  matVidFd.append('videoSource', 'UPLOAD');
+  matVidFd.append('fileUrl', matVidUrl);
+  r = await req('POST', '/materials', { token: tToken, form: matVidFd });
+  ok(
+    'material video create via fileUrl',
+    (r.status === 201 || r.status === 200) && r.data?.fileUrl === matVidUrl,
+    `${r.status} ${JSON.stringify(r.data)}`,
+  );
 
   // --- (6) trust proxy: per-IP login lockout honours X-Forwarded-For ---
   const rlLogin = `rl_${uniq}`;

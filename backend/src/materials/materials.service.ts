@@ -38,6 +38,36 @@ export class MaterialsService {
     };
   }
 
+  /** Bo'laklab yuklangan rasm URL'larini (JSON massiv) tekshirib oladi. */
+  private async resolveImageUrls(
+    raw: string | undefined,
+    groupId: string,
+    ownerId: string,
+  ): Promise<string[]> {
+    if (!raw) return [];
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new BadRequestException("Rasm URL'lari noto'g'ri formatda");
+    }
+    if (!Array.isArray(parsed)) {
+      throw new BadRequestException("Rasm URL'lari noto'g'ri formatda");
+    }
+    const urls: string[] = [];
+    for (const u of parsed) {
+      if (typeof u !== 'string' || u.length > 500) {
+        throw new BadRequestException("Rasm URL'lari noto'g'ri formatda");
+      }
+      const owned = await this.files.isOwnedGroupFile(u, groupId, ownerId);
+      if (!owned) {
+        throw new BadRequestException('Rasm bu guruhga tegishli emas');
+      }
+      urls.push(u);
+    }
+    return urls;
+  }
+
   // ---- Teacher ----
   async list(teacherId: string, query: any) {
     const { page, pageSize, skip, take, search } = getPagination(query);
@@ -84,16 +114,30 @@ export class MaterialsService {
           },
         });
       }
-      // UPLOAD
-      const video = files?.[0];
-      if (!video) throw new BadRequestException('Video fayl yuklanmadi');
-      const saved = await this.files.save(
-        video,
-        'video',
-        FileScope.GROUP,
-        dto.groupId,
-        teacherId,
-      );
+      // UPLOAD: multipart fayl yoki bo'laklab yuklangan URL.
+      let fileUrl: string | null = null;
+      if (dto.fileUrl) {
+        const owned = await this.files.isOwnedGroupFile(
+          dto.fileUrl,
+          dto.groupId,
+          teacherId,
+        );
+        if (!owned) {
+          throw new BadRequestException('Video fayl bu guruhga tegishli emas');
+        }
+        fileUrl = dto.fileUrl;
+      } else {
+        const video = files?.[0];
+        if (!video) throw new BadRequestException('Video fayl yuklanmadi');
+        const saved = await this.files.save(
+          video,
+          'video',
+          FileScope.GROUP,
+          dto.groupId,
+          teacherId,
+        );
+        fileUrl = saved.url;
+      }
       return this.prisma.material.create({
         data: {
           groupId: dto.groupId,
@@ -101,19 +145,23 @@ export class MaterialsService {
           title: dto.title.trim(),
           description: dto.description?.trim() || null,
           videoSource: VideoSource.UPLOAD,
-          fileUrl: saved.url,
+          fileUrl,
         },
       });
     }
 
     // IMAGE
-    if (!files || files.length === 0) {
-      throw new BadRequestException('Kamida bitta rasm yuklang');
+    const byUrls = await this.resolveImageUrls(dto.imageUrls, dto.groupId, teacherId);
+    const urlFromFiles: string[] = [];
+    if (files?.length) {
+      for (const f of files) {
+        const saved = await this.files.save(f, 'image', FileScope.GROUP, dto.groupId, teacherId);
+        urlFromFiles.push(saved.url);
+      }
     }
-    const urls: string[] = [];
-    for (const f of files) {
-      const saved = await this.files.save(f, 'image', FileScope.GROUP, dto.groupId, teacherId);
-      urls.push(saved.url);
+    const urls = [...byUrls, ...urlFromFiles];
+    if (urls.length === 0) {
+      throw new BadRequestException('Kamida bitta rasm yuklang');
     }
     return this.prisma.material.create({
       data: {
@@ -149,18 +197,38 @@ export class MaterialsService {
     }
 
     // Yangi fayllar (ixtiyoriy)
-    if (material.type === MaterialType.VIDEO && files?.length && material.videoSource === VideoSource.UPLOAD) {
-      const saved = await this.files.save(files[0], 'video', FileScope.GROUP, material.groupId, teacherId);
-      if (material.fileUrl) await this.files.removeByUrl(material.fileUrl);
-      data.fileUrl = saved.url;
-    } else if (material.type === MaterialType.IMAGE && files?.length) {
-      // Yangi rasmlar qo'shiladi
-      const urls: string[] = [...material.imageUrls];
-      for (const f of files) {
-        const saved = await this.files.save(f, 'image', FileScope.GROUP, material.groupId, teacherId);
-        urls.push(saved.url);
+    if (material.type === MaterialType.VIDEO && material.videoSource === VideoSource.UPLOAD) {
+      // multipart fayl avval, aks holda bo'laklab yuklangan URL.
+      if (files?.length) {
+        const saved = await this.files.save(files[0], 'video', FileScope.GROUP, material.groupId, teacherId);
+        if (material.fileUrl) await this.files.removeByUrl(material.fileUrl);
+        data.fileUrl = saved.url;
+      } else if (dto.fileUrl) {
+        const owned = await this.files.isOwnedGroupFile(
+          dto.fileUrl,
+          material.groupId,
+          teacherId,
+        );
+        if (!owned) {
+          throw new BadRequestException('Video fayl bu guruhga tegishli emas');
+        }
+        if (material.fileUrl && material.fileUrl !== dto.fileUrl) {
+          await this.files.removeByUrl(material.fileUrl);
+        }
+        data.fileUrl = dto.fileUrl;
       }
-      data.imageUrls = urls;
+    } else if (material.type === MaterialType.IMAGE) {
+      // Yangi rasmlar qo'shiladi (multipart fayllar + bo'laklab yuklangan URL'lar)
+      const urls: string[] = [...material.imageUrls];
+      const byUrls = await this.resolveImageUrls(dto.imageUrls, material.groupId, teacherId);
+      urls.push(...byUrls);
+      if (files?.length) {
+        for (const f of files) {
+          const saved = await this.files.save(f, 'image', FileScope.GROUP, material.groupId, teacherId);
+          urls.push(saved.url);
+        }
+      }
+      if (urls.length !== material.imageUrls.length) data.imageUrls = urls;
     }
 
     return this.prisma.material.update({ where: { id }, data });

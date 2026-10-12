@@ -7,6 +7,7 @@ import { useThemeCtx } from '../context/ThemeContext';
 import { api, errMsg, fileUrl } from '../lib/api';
 import { Button, Input, PageHeader, Avatar } from '../components/ui';
 import { formatPhoneInput, isValidPhone } from '../lib/format';
+import { uploadFileChunked } from '../lib/upload';
 
 export function SettingsPage() {
   const { user, setUser } = useAuth();
@@ -62,9 +63,9 @@ export function SettingsPage() {
   const uploadAvatar = async (file: File) => {
     setUploadingAvatar(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      const { data } = await api.post('/users/me/avatar', fd);
+      // Avatar avval bo'laklab yuklanadi, so'ng URL saqlanadi.
+      const uploaded = await uploadFileChunked(file, { kind: 'avatar', scope: 'AVATAR' });
+      const { data } = await api.post('/users/me/avatar', { fileUrl: uploaded.url });
       setUser({ ...user, avatarUrl: data.avatarUrl });
       toast(t('upload') + ': ' + t('success'));
     } catch (e: any) {
