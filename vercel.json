@@ -3,17 +3,17 @@
   "services": {
     "backend": {
       "root": "backend",
-      "runtime": "container",
-      "entrypoint": "Dockerfile"
+      "entrypoint": "Dockerfile.vercel"
     },
     "frontend": {
       "root": "frontend",
-      "framework": "vite"
+      "framework": "vite",
+      "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
     }
   },
   "rewrites": [
     {
-      "source": "/sockeft.io/(.*)",
+      "source": "/socket.io/(.*)",
       "destination": { "service": "backend" }
     },
     {

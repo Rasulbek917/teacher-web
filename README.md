@@ -274,30 +274,60 @@ docker compose -f docker-compose.prod.yml down -v
 
 ## 6. Vercel'ga deploy (ixtiyoriy — VPS bilan bir xil kod)
 
-Bir xil repodan ikkala muhitga deploy qilinadi. Ildizdagi `vercel.json` ikki
-servisni e'lon qiladi va yo'llarni taqsimlaydi:
+Bir xil repodan ikkala muhitga deploy qilinadi. Ildizdagi `vercel.json`
+**Vercel Services** rejimida ikki servisni e'lon qiladi:
 
-- `backend` — NestJS (Docker container, mavjud `backend/Dockerfile`);
-- `frontend` — Vite (statik);
+- `backend` — NestJS, **container** (`backend/Dockerfile.vercel`) — Prisma,
+  Socket.IO va barcha tizim kutubxonalari image ichida bo'ladi;
+- `frontend` — Vite (statik SPA, `index.html` fallback).
 
 Rewrite'lar: `/api/*` va `/socket.io/*` → `backend`; qolgani → `frontend`.
+Shu sababli ikkalasi ham **bitta domenda** (same-origin) ishlaydi — CORS muammosi yo'q.
+
+> Vercel loyiha sozlamalari: **Root Directory** = repo ildizi, **Framework** = `services`.
+
+### Deploy qadamlari (Vercel CLI)
+
+```bash
+npx vercel login                              # 1) kirish
+npx vercel link --project teacher-web         # 2) loyihani ulash (repo ildizida)
+npx vercel blob create-store teacher-web-blob --access private --yes   # 3) fayl store + token
+echo "postgresql://..." | npx vercel env add DATABASE_URL production   # 4) env
+npx vercel deploy --prod                      # 5) deploy
+```
 
 ### Kerakli Vercel env o'zgaruvchilari
 
 | O'zgaruvchi | Qiymat |
 | --- | --- |
 | `DATABASE_URL` | Neon (yoki boshqa) Postgres, `?sslmode=require` bilan |
-| `JWT_SECRET` | kuchli, tasodifiy sir |
-| `SUPERADMIN_PASSWORD` | kuchli parol |
+| `JWT_SECRET` | kuchli, tasodifiy sir (≥32 belgi) |
+| `SUPERADMIN_*` | superadmin login/parol/ism... (`SUPERADMIN_PASSWORD` kuchli) |
 | `CORS_ORIGIN` | `https://teacher.<domen>.uz` |
 | `NODE_ENV` | `production` |
-| `RUN_MIGRATIONS_ON_START` | `false` |
-| `BLOB_READ_WRITE_TOKEN` | Vercel Blob tokeni (fayllar uchun) |
-| `REDIS_URL` | Upstash Redis (ko'p instance chat uchun) |
-| `CRON_SECRET` | cron endpoint himoyasi |
+| `BLOB_READ_WRITE_TOKEN` | `blob create-store` bilan avtomatik qo'shiladi |
+| `BLOB_ACCESS` | `private` |
+| `RUN_MIGRATIONS_ON_START` | `false` (baza migratsiyasi qo'lda bir marta) |
+| `REDIS_URL` | Upstash Redis (ko'p instance chat uchun, ixtiyoriy) |
+| `CRON_SECRET` | cron endpoint himoyasi (ixtiyoriy) |
 
 > `frontend` uchun `VITE_API_URL` **bermang** — bo'sh bo'lsa same-origin
 > (`/api` rewrite) ishlaydi. Berilsa, faqat shu domen ishlaydi.
+
+> **Bazani tayyorlash:** Vercel'da `RUN_MIGRATIONS_ON_START=false` bo'lgani uchun
+> sxema avtomatik yaratilmaydi. Bir marta qo'lda bajaring (lokal kompyuterdan,
+> `backend/` ichida, produksiya `DATABASE_URL` bilan):
+> `npm run prisma:migrate && npm run seed`.
+
+### Domenni ulash
+
+```bash
+npx vercel domains add teacher.<domen>.uz teacher-web
+npx vercel domains verify teacher.<domen>.uz   # kerakli DNS yozuvni ko'rsatadi
+```
+
+DNS provayderda ko'rsatilgan CNAME yozuvini qo'shing
+(masalan: `teacher` → `cname.vercel-dns.com`).
 
 ### Cheklovlar (muhim!)
 

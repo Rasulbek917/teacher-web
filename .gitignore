@@ -27,3 +27,5 @@ Thumbs.db
 
 # Prisma lokal bazalar
 backend/prisma/*.db
+
+.vercel
