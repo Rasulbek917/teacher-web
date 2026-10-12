@@ -166,6 +166,20 @@ export class RealtimeGateway
     }
   }
 
+  /**
+   * Chat sahifasi joriy online ro'yxatni so'raydi.
+   *
+   * Socket ilova ochilganda ulangan bo'ladi, `presence:init` esa faqat
+   * ulanish paytida bir marta yuboriladi. Chat sahifasi keyinroq ochilsa,
+   * dastlabki ro'yxatni o'tkazib yuboradi (hamma "offline" bo'lib ko'rinadi).
+   * Shu sababli qayta so'rash imkonini beramiz.
+   */
+  @SubscribeMessage('presence:get')
+  onPresenceGet(@ConnectedSocket() client: Socket) {
+    client.emit('presence:init', this.onlineUserIds());
+    return { ok: true };
+  }
+
   @SubscribeMessage('conversation:join')
   async onJoin(
     @ConnectedSocket() client: Socket,

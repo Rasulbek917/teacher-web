@@ -80,6 +80,15 @@ export function ChatPage() {
     try {
       const { data } = await api.get('/chat/conversations');
       setConvs(data);
+      // Presence zaxirasi: API snapshotidagi online holatlarni ham qo'shamiz
+      // (socket hali ulanmagan / uzilgan holatlar uchun).
+      setOnlineUsers((prev) => {
+        const next = new Set(prev);
+        for (const c of data as ConversationItem[]) {
+          if (c.otherUser?.online) next.add(c.otherUser.id);
+        }
+        return next;
+      });
       return data as ConversationItem[];
     } catch (e: any) {
       setError(errMsg(e, t('error')));
@@ -188,6 +197,10 @@ export function ChatPage() {
     // Socket (qayta) ulanganda suhbatlar va ochiq xabarlarni yangilaymiz —
     // bu "xabar turib qolishi" muammosini bartaraf etadi.
     const onConnect = () => {
+      // Joriy online ro'yxatni so'raymiz (ham ulanishda, ham qayta ulanishda).
+      // `presence:init` faqat bir marta yuborilgani uchun, Chat sahifasi keyin
+      // ochilsa uni o'tkazib yuboradi — natijada hamma "offline" ko'rinadi.
+      socket.emit('presence:get');
       loadConvs();
       if (activeIdRef.current) loadMessages(activeIdRef.current, true);
     };
@@ -198,6 +211,9 @@ export function ChatPage() {
     socket.on('presence:init', onPresenceInit);
     socket.on('presence:update', onPresenceUpdate);
     socket.on('connect', onConnect);
+    // Socket allaqachon ulangan bo'lsa (Chat sahifasi keyin ochilgan) — darhol
+    // joriy online ro'yxatni so'raymiz.
+    if (socket.connected) socket.emit('presence:get');
     return () => {
       socket.off('message:new', onNew);
       socket.off('message:updated', onUpdated);
@@ -284,6 +300,12 @@ export function ChatPage() {
     try {
       const { data } = await api.get('/chat/contacts');
       setContacts(data);
+      // API snapshotidagi online holatlarni ham qo'shamiz (zaxira).
+      setOnlineUsers((prev) => {
+        const next = new Set(prev);
+        for (const c of data as Contact[]) if (c.online) next.add(c.id);
+        return next;
+      });
     } catch (e: any) {
       toast(errMsg(e), 'error');
     }
