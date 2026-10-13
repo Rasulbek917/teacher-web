@@ -97,7 +97,29 @@ SUPERADMIN_LOGIN=superadmin
 SUPERADMIN_PASSWORD=superadmin123
 CORS_ORIGIN=http://localhost:5173
 UPLOAD_DIR=./uploads
+
+# --- Telegram bot (ota-onaga bildirishnoma) ---
+# Token bo'lmasa xabar yuborilmaydi (sayt baribir ishlaydi).
+TELEGRAM_BOT_TOKEN=123456:ABC-your-bot-token
+TELEGRAM_BOT_USERNAME=YourBot
+# Webhook'ni himoyalash uchun maxfiy so'z (ixtiyoriy, tavsiya etiladi):
+TELEGRAM_WEBHOOK_SECRET=change-me
+# Ommaviy HTTPS manzil (bo'sh bo'lsa CORS_ORIGIN'dan olinadi):
+TELEGRAM_WEBHOOK_URL=https://your-domain.uz/api/telegram/webhook
+# /cron/* endpointlarini himoyalash (ixtiyoriy):
+CRON_SECRET=change-me
 ```
+
+> **Bildirishnomalar.** O'qituvchi o'quvchi kartasidagi Telegram tugmasi orqali
+> ota-onaga havola (`t.me/<bot>?start=<token>`) yuboradi; ota-ona botda «Start»
+> bosgach ulanadi. So'ng: (a) o'quvchi darsga **kelmadi** belgilansa darhol xabar
+> boradi; (b) oylik to'lov muddatidan 1 hafta oldin, muddat kuni va keyin
+> **har 2 kunda** to'lamaguncha eslatma boradi (faqat UNPAID/PARTIAL). Muddat har
+> oy uchun «To'lovlar» sahifasida qo'lda tanlanadi.
+>
+> **Vercel'da** doimiy cron ishlamaydi — `/api/cron/payment-reminders` ni tashqi
+> scheduler (yoki Vercel Cron) orqali kuniga bir marta chaqiring:
+> `curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://<domen>/api/cron/payment-reminders`.
 
 `frontend/.env`:
 
@@ -111,7 +133,7 @@ VITE_API_URL=http://localhost:3000
 cd backend
 npm run test:e2e     # 15 ta e2e test (login/ruxsat, davomat, to'lov, kaskad, dedupe ...)
 
-# Ishlab turgan backendga qarshi to'liq API smoke test (32 ta tekshiruv):
+# Ishlab turgan backendga qarshi to'liq API smoke test (77 ta tekshiruv):
 node smoke.mjs
 
 # Demo ma'lumotlar yaratish (teacher1/teacher123, student1/student123):

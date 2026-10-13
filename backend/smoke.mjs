@@ -120,6 +120,13 @@ async function main() {
   r = await req('GET', `/attendance?groupId=${groupId}&date=${date}`, { token: tToken });
   ok('attendance fetch', r.status === 200 && JSON.stringify(r.data).includes(studentId), `${r.status} ${JSON.stringify(r.data).slice(0, 200)}`);
 
+  // --- attendance: "kelmadi" (present=false) — saqlash buzilmaydi ---
+  r = await req('POST', '/attendance', {
+    token: tToken,
+    body: { groupId, date, records: [{ studentId, present: false }] },
+  });
+  ok('attendance mark absent (kelmadi)', (r.status === 201 || r.status === 200), `${r.status} ${JSON.stringify(r.data)}`);
+
   // --- homework create ---
   r = await req('POST', '/homework', {
     token: tToken,
