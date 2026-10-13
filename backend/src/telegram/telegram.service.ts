@@ -186,6 +186,47 @@ export class TelegramService implements OnModuleInit {
     return !!found;
   }
 
+  /** Bir nechta dedupe kalitni bitta so'rovda tekshiradi (N+1 oldini oladi). */
+  async alreadyLoggedMany(dedupeKeys: string[]): Promise<Set<string>> {
+    if (!dedupeKeys.length) return new Set();
+    const rows = await this.prisma.parentNotificationLog.findMany({
+      where: { dedupeKey: { in: dedupeKeys } },
+      select: { dedupeKey: true },
+    });
+    return new Set(rows.map((r) => r.dedupeKey));
+  }
+
+  /** Bir nechta jurnal yozuvini bitta so'rovda saqlaydi. */
+  async logNotificationsMany(
+    items: {
+      studentId: string;
+      groupId?: string | null;
+      kind: string;
+      dedupeKey: string;
+      periodYear?: number;
+      periodMonth?: number;
+      offsetDays?: number;
+    }[],
+  ): Promise<void> {
+    if (!items.length) return;
+    try {
+      await this.prisma.parentNotificationLog.createMany({
+        data: items.map((i) => ({
+          studentId: i.studentId,
+          groupId: i.groupId ?? null,
+          kind: i.kind,
+          dedupeKey: i.dedupeKey,
+          periodYear: i.periodYear ?? null,
+          periodMonth: i.periodMonth ?? null,
+          offsetDays: i.offsetDays ?? null,
+        })),
+        skipDuplicates: true,
+      });
+    } catch {
+      // Xatolar yutiladi — bildirishnoma saqlashni buzmasligi kerak.
+    }
+  }
+
   // ---------------- Xabar matnlari (o'zbekcha) ----------------
 
   buildPaymentMessage(kind: string, input: PaymentMessageInput): string {

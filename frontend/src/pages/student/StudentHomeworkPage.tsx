@@ -20,7 +20,10 @@ import { uploadFileChunked } from '../../lib/upload';
 import { submissionStatusMeta } from '../../lib/homeworkStatus';
 import type { Paginated, StudentHomeworkItem, StudentHomeworkDetail } from '../../lib/types';
 
-const ACCEPT = 'image/*,video/*,application/pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt';
+const ACCEPT =
+  'image/jpeg,image/png,image/webp,image/gif,image/bmp,image/heic,image/heif,image/avif,image/tiff,' +
+  'video/mp4,video/webm,video/quicktime,video/x-matroska,video/x-msvideo,video/3gpp,video/x-m4v,' +
+  'application/pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.csv,.rtf,.zip,.rar,.7z,.tar,.gz';
 
 export function StudentHomeworkPage() {
   const { t } = useI18n();

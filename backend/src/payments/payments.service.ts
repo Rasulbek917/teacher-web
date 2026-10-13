@@ -32,33 +32,46 @@ export class PaymentsService {
 
     const memberWhere: any = { group: { teacherId } };
     if (groupId && groupId !== 'all') memberWhere.groupId = groupId;
+    if (search) {
+      memberWhere.student = {
+        OR: [
+          { firstName: { contains: search, mode: 'insensitive' } },
+          { lastName: { contains: search, mode: 'insensitive' } },
+        ],
+      };
+    }
 
-    const allMembers = await this.prisma.groupMembership.findMany({
-      where: memberWhere,
-      include: {
-        student: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            phone: true,
-            avatarUrl: true,
-            isBlocked: true,
+    // Sahifalash endi DB darajasida: faqat kerakli sahifadagi a'zoliklar
+    // o'qiladi (500+ o'quvchida ham tez). Umumiy son/`sum`/`unpaid` esa
+    // alohida agregat so'rovda hisoblanadi — butun jadval xotiraga olinmaydi.
+    const [total, members] = await Promise.all([
+      this.prisma.groupMembership.count({ where: memberWhere }),
+      this.prisma.groupMembership.findMany({
+        where: memberWhere,
+        include: {
+          student: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              phone: true,
+              avatarUrl: true,
+              isBlocked: true,
+            },
           },
+          group: { select: { id: true, name: true, monthlyPrice: true } },
         },
-        group: { select: { id: true, name: true, monthlyPrice: true } },
-      },
-    });
+        orderBy: [
+          { student: { firstName: 'asc' } },
+          { student: { lastName: 'asc' } },
+          { id: 'asc' },
+        ],
+        skip,
+        take,
+      }),
+    ]);
 
-    const filtered = search
-      ? allMembers.filter((m) =>
-          `${m.student.firstName} ${m.student.lastName}`
-            .toLowerCase()
-            .includes(search.toLowerCase()),
-        )
-      : allMembers;
-
-    const studentIds = [...new Set(filtered.map((m) => m.studentId))];
+    const studentIds = [...new Set(members.map((m) => m.studentId))];
     const payments = studentIds.length
       ? await this.prisma.payment.findMany({
           where: {
@@ -71,7 +84,7 @@ export class PaymentsService {
       : [];
     const payMap = new Map(payments.map((p) => [`${p.studentId}:${p.groupId}`, p]));
 
-    const rows = filtered.map((m) => {
+    const rows = members.map((m) => {
       const price = m.customPrice ?? m.group.monthlyPrice;
       const p = payMap.get(`${m.studentId}:${m.groupId}`);
       const amount = p?.amount ?? 0;
@@ -90,10 +103,42 @@ export class PaymentsService {
       };
     });
 
-    const total = rows.length;
-    const paged = rows.slice(skip, skip + take);
-    const sum = rows.reduce((a, r) => a + r.amount, 0);
-    const unpaid = rows.filter((r) => r.status !== PaymentStatus.PAID).length;
+    // Butun filtr uchun yig'indi va to'lanmaganlar soni — bitta agregat SQL.
+    const conds: string[] = ['g."teacherId" = $1'];
+    const params: any[] = [teacherId];
+    if (groupId && groupId !== 'all') {
+      params.push(groupId);
+      conds.push(`m."groupId" = $${params.length}`);
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      conds.push(`(u."firstName" ILIKE $${params.length} OR u."lastName" ILIKE $${params.length})`);
+    }
+    params.push(year);
+    const yi = params.length;
+    params.push(month);
+    const mi = params.length;
+    params.push(teacherId);
+    const ti = params.length;
+    const aggRows = await this.prisma.$queryRawUnsafe<
+      { sum: bigint | number; unpaid: number }[]
+    >(
+      `SELECT COALESCE(SUM(COALESCE(p.amount, 0)), 0)::bigint AS sum,
+              COUNT(*) FILTER (WHERE p.status IS DISTINCT FROM 'PAID')::int AS unpaid
+         FROM "GroupMembership" m
+         JOIN "Group" g ON g.id = m."groupId"
+         JOIN "User" u ON u.id = m."studentId"
+         LEFT JOIN "Payment" p
+           ON p."studentId" = m."studentId"
+          AND p."groupId" = m."groupId"
+          AND p."periodYear" = $${yi}
+          AND p."periodMonth" = $${mi}
+          AND p."teacherId" = $${ti}
+        WHERE ${conds.join(' AND ')}`,
+      ...params,
+    );
+    const sum = Number(aggRows[0]?.sum ?? 0);
+    const unpaid = Number(aggRows[0]?.unpaid ?? 0);
 
     const deadline = await this.prisma.paymentDeadline.findUnique({
       where: {
@@ -106,7 +151,7 @@ export class PaymentsService {
     });
 
     return {
-      ...paginate(paged, total, page, pageSize),
+      ...paginate(rows, total, page, pageSize),
       sum,
       unpaid,
       deadline: deadline?.dueDate ?? null,

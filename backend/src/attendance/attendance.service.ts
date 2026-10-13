@@ -183,25 +183,48 @@ export class AttendanceService {
     });
     const dateStr = formatDate(date);
     const ymd = date.toISOString().slice(0, 10);
-    for (const s of students) {
-      const chatId = s.studentProfile?.parentTelegramChatId;
-      if (!chatId) continue;
-      const dedupeKey = `ABSENCE:${s.id}:${groupId}:${ymd}`;
-      if (await this.telegram.alreadyLogged(dedupeKey)) continue;
-      const text = this.telegram.buildAbsenceMessage({
-        studentName: `${s.firstName} ${s.lastName}`,
-        groupName: group?.name || '',
-        dateStr,
-      });
-      const ok = await this.telegram.sendMessage(chatId, text);
-      if (ok) {
-        await this.telegram.logNotification({
-          studentId: s.id,
+
+    const targets = students
+      .map((s) => ({
+        student: s,
+        chatId: s.studentProfile?.parentTelegramChatId || '',
+        dedupeKey: `ABSENCE:${s.id}:${groupId}:${ymd}`,
+      }))
+      .filter((t) => !!t.chatId);
+    if (!targets.length) return;
+
+    // Bitta so'rovda allaqachon yuborilganlarni aniqlaymiz.
+    const logged = await this.telegram.alreadyLoggedMany(targets.map((t) => t.dedupeKey));
+    const pending = targets.filter((t) => !logged.has(t.dedupeKey));
+    if (!pending.length) return;
+
+    // Yuborishni cheklangan parallellikda bajaramiz (ketma-ket emas).
+    const CONCURRENCY = 8;
+    const sent: typeof pending = [];
+    for (let i = 0; i < pending.length; i += CONCURRENCY) {
+      const chunk = pending.slice(i, i + CONCURRENCY);
+      const results = await Promise.all(
+        chunk.map(async (t) => {
+          const text = this.telegram.buildAbsenceMessage({
+            studentName: `${t.student.firstName} ${t.student.lastName}`,
+            groupName: group?.name || '',
+            dateStr,
+          });
+          const ok = await this.telegram.sendMessage(t.chatId, text);
+          return ok ? t : null;
+        }),
+      );
+      for (const r of results) if (r) sent.push(r);
+    }
+    if (sent.length) {
+      await this.telegram.logNotificationsMany(
+        sent.map((t) => ({
+          studentId: t.student.id,
           groupId,
           kind: 'ABSENCE',
-          dedupeKey,
-        });
-      }
+          dedupeKey: t.dedupeKey,
+        })),
+      );
     }
   }
 }

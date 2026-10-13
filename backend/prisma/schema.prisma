@@ -127,6 +127,9 @@ model User {
   @@index([role])
   @@index([createdAt])
   @@index([login])
+  // Ism bo'yicha tartiblash/izlash uchun (o'quvchilar, kontaktlar, davomat).
+  @@index([firstName, lastName])
+  @@index([role, firstName])
 }
 
 model TeacherProfile {

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PaymentStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { monthOf, yearOf, TASHKENT_OFFSET_MS } from '../common/date.util';
+import { monthOf, yearOf } from '../common/date.util';
 
 /** Foiz o'zgarish: (joriy - oldingi) / oldingi * 100 */
 function percentChange(current: number, previous: number): number {
@@ -88,9 +88,6 @@ export class DashboardService {
     const curY = yearOf(nowD);
     const curM = monthOf(nowD);
 
-    const monthStart = (y: number, m: number) =>
-      new Date(Date.UTC(y, m - 1, 1) - TASHKENT_OFFSET_MS);
-
     const prevYM = (y: number, m: number) =>
       m === 1 ? { y: y - 1, m: 12 } : { y, m: m - 1 };
     const lastY = prevYM(curY, curM);
@@ -117,14 +114,15 @@ export class DashboardService {
       this.prisma.user.count({ where: { isBlocked: false } }),
     ]);
 
-    // ---- Tushumlar (oylik, summa bo'yicha guruhlanadi)
-    const payments = await this.prisma.payment.findMany({
-      select: { periodYear: true, periodMonth: true, amount: true },
+    // ---- Tushumlar (oylik) — butun to'lov jadvalini xotiraga olmasdan,
+    // DB darajasida oy bo'yicha agregat qilamiz (jadval cheksiz o'sadi).
+    const revRows = await this.prisma.payment.groupBy({
+      by: ['periodYear', 'periodMonth'],
+      _sum: { amount: true },
     });
     const revenueByMonth = new Map<string, number>();
-    for (const p of payments) {
-      const k = `${p.periodYear}-${p.periodMonth}`;
-      revenueByMonth.set(k, (revenueByMonth.get(k) ?? 0) + p.amount);
+    for (const r of revRows) {
+      revenueByMonth.set(`${r.periodYear}-${r.periodMonth}`, r._sum.amount ?? 0);
     }
     const revenueThisMonth = revenueByMonth.get(`${curY}-${curM}`) ?? 0;
     const revenueLastMonth = revenueByMonth.get(`${lastY.y}-${lastY.m}`) ?? 0;
@@ -144,42 +142,47 @@ export class DashboardService {
       }
     }
 
-    const users = await this.prisma.user.findMany({
-      where: { role: { in: [Role.TEACHER, Role.STUDENT] } },
-      select: { role: true, createdAt: true, isBlocked: true },
-    });
+    // Foydalanuvchilarni oy bo'yicha sanash (barcha userlarni yuklamaymiz).
+    // `createdAt - 5 soat` => Tashkent oyi (UTC+5), so'ng oy bo'yicha guruhlash.
+    const growthRows = await this.prisma.$queryRawUnsafe<
+      { ym: string; role: string; n: number }[]
+    >(
+      `SELECT to_char(date_trunc('month', "createdAt" - interval '5 hours'), 'YYYY-MM') AS ym,
+              role::text AS role,
+              COUNT(*)::int AS n
+         FROM "User"
+        WHERE role::text IN ('TEACHER', 'STUDENT')
+        GROUP BY 1, 2`,
+    );
+    const perRole = new Map<string, Map<string, number>>();
+    for (const r of growthRows) {
+      if (!perRole.has(r.role)) perRole.set(r.role, new Map());
+      perRole.get(r.role)!.set(r.ym, Number(r.n));
+    }
+    /** Berilgan oyga qadar (shu oy ham) yaratilgan userlar soni. */
+    const cumulative = (role: string, y: number, m: number): number => {
+      const map = perRole.get(role);
+      if (!map) return 0;
+      const target = `${y}-${String(m).padStart(2, '0')}`;
+      let sum = 0;
+      for (const [ym, n] of map) if (ym <= target) sum += n;
+      return sum;
+    };
 
-    const nextMonthStart = (y: number, m: number) =>
-      m === 12 ? monthStart(y + 1, 1) : monthStart(y, m + 1);
-    const teachersGrowth = months.map((mo) =>
-      users.filter(
-        (u) => u.role === Role.TEACHER && u.createdAt < nextMonthStart(mo.year, mo.month),
-      ).length,
-    );
-    const studentsGrowth = months.map((mo) =>
-      users.filter(
-        (u) => u.role === Role.STUDENT && u.createdAt < nextMonthStart(mo.year, mo.month),
-      ).length,
-    );
+    const teachersGrowth = months.map((mo) => cumulative('TEACHER', mo.year, mo.month));
+    const studentsGrowth = months.map((mo) => cumulative('STUDENT', mo.year, mo.month));
     const revenueGrowth = months.map(
       (mo) => revenueByMonth.get(`${mo.year}-${mo.month}`) ?? 0,
     );
 
     // ---- Oylik hisobotlar (shu oy vs o'tgan oy)
-    const curStart = monthStart(curY, curM);
-    const lastStart = monthStart(lastY.y, lastY.m);
-    const teachersThisMonth = users.filter(
-      (u) => u.role === Role.TEACHER && u.createdAt >= curStart,
-    ).length;
-    const teachersLastMonth = users.filter(
-      (u) => u.role === Role.TEACHER && u.createdAt >= lastStart && u.createdAt < curStart,
-    ).length;
-    const studentsThisMonth = users.filter(
-      (u) => u.role === Role.STUDENT && u.createdAt >= curStart,
-    ).length;
-    const studentsLastMonth = users.filter(
-      (u) => u.role === Role.STUDENT && u.createdAt >= lastStart && u.createdAt < curStart,
-    ).length;
+    const thisKey = `${curY}-${String(curM).padStart(2, '0')}`;
+    const lastKey = `${lastY.y}-${String(lastY.m).padStart(2, '0')}`;
+    const bucket = (role: string, ym: string) => perRole.get(role)?.get(ym) ?? 0;
+    const teachersThisMonth = bucket('TEACHER', thisKey);
+    const teachersLastMonth = bucket('TEACHER', lastKey);
+    const studentsThisMonth = bucket('STUDENT', thisKey);
+    const studentsLastMonth = bucket('STUDENT', lastKey);
 
     const recentTeachers = await this.prisma.user.findMany({
       where: { role: Role.TEACHER },

@@ -38,13 +38,31 @@ export interface ChunkUploadMeta {
   scopeId: string | null;
 }
 
-const IMAGE_MIMES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+// Ruxsat etilgan turlar. FAQAT xavfsiz (inline bajarilmaydigan) turlar —
+// `text/html`, `image/svg+xml` kabi skript ishlatishi mumkin bo'lgan turlar
+// ataylab kiritilmagan.
+const IMAGE_MIMES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+  'image/gif',
+  'image/bmp',
+  'image/avif',
+  'image/tiff',
+];
 const VIDEO_MIMES = [
   'video/mp4',
   'video/webm',
   'video/quicktime',
   'video/x-matroska',
   'video/x-msvideo',
+  'video/3gpp',
+  'video/x-m4v',
+  'video/mpeg',
+  'video/ogg',
 ];
 const VOICE_MIMES = [
   'audio/webm',
@@ -63,9 +81,65 @@ const DOC_MIMES = [
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'text/plain',
+  'text/csv',
+  'application/rtf',
+  'text/rtf',
   'application/zip',
   'application/x-rar-compressed',
+  'application/vnd.rar',
+  'application/x-7z-compressed',
+  'application/x-tar',
+  'application/gzip',
 ];
+
+/**
+ * Fayl kengaytmasidan xavfsiz MIME turni aniqlaydi. Ba'zi brauzerlar (ayniqsa
+ * Windows/telefon) fayl turini bilmasa `application/octet-stream` yuboradi —
+ * shunda kengaytmadan turni tiklaymiz (faqat yuqoridagi xavfsiz ro'yxatdan).
+ */
+const EXT_MIME: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  gif: 'image/gif',
+  bmp: 'image/bmp',
+  avif: 'image/avif',
+  tif: 'image/tiff',
+  tiff: 'image/tiff',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  mkv: 'video/x-matroska',
+  avi: 'video/x-msvideo',
+  '3gp': 'video/3gpp',
+  m4v: 'video/x-m4v',
+  mpeg: 'video/mpeg',
+  mpg: 'video/mpeg',
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  txt: 'text/plain',
+  csv: 'text/csv',
+  rtf: 'application/rtf',
+  zip: 'application/zip',
+  rar: 'application/vnd.rar',
+  '7z': 'application/x-7z-compressed',
+  tar: 'application/x-tar',
+  gz: 'application/gzip',
+};
+
+function inferMimeFromName(name?: string): string | null {
+  if (!name) return null;
+  const ext = name.split('.').pop()?.toLowerCase() || '';
+  return EXT_MIME[ext] ?? null;
+}
 
 @Injectable()
 export class FilesService {
@@ -156,13 +230,28 @@ export class FilesService {
     diskFilename?: string;
   }) {
     const cfg = this.limits()[input.kind];
-    const mime = (input.mimeType || '').toLowerCase();
+    let mime = (input.mimeType || '').toLowerCase();
     const maxBytes = cfg.maxMb * 1024 * 1024;
 
+    // Ba'zi brauzerlar turni bilmasa `application/octet-stream` (yoki bo'sh)
+    // yuboradi. Bunday holatda avval kengaytmadan xavfsiz turni tiklaymiz,
+    // aks holda biriktirma/fayl uchun octet-stream sifatida qabul qilamiz
+    // (octet-stream inline bajarilmaydi — xavfsiz).
     if (!cfg.mimes.includes(mime)) {
-      throw new BadRequestException(
-        `Fayl turi ruxsat etilmagan (${mime}). Ruxsat: ${cfg.mimes.join(', ')}`,
-      );
+      const inferred = inferMimeFromName(input.originalname);
+      if (inferred && cfg.mimes.includes(inferred)) {
+        mime = inferred;
+      } else if (
+        (mime === 'application/octet-stream' || mime === '') &&
+        (input.kind === 'file' || input.kind === 'attachment')
+      ) {
+        mime = 'application/octet-stream';
+      } else {
+        throw new BadRequestException(
+          `Fayl turi qo'llab-quvvatlanmaydi (${mime || 'noma\'lum'}). ` +
+            `Rasm, video, PDF yoki hujjat yuklang.`,
+        );
+      }
     }
     const totalSize = Number(input.size) || input.buffer?.byteLength || 0;
     if (totalSize > maxBytes) {
