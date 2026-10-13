@@ -143,8 +143,13 @@ export function HomeworkPage() {
   };
 
   const addFiles = (files: FileList | null) => {
-    if (!files) return;
-    setNewFiles((prev) => [...prev, ...Array.from(files)]);
+    if (!files || files.length === 0) return;
+    // MUHIM: `files` — "live" FileList. Pastdagi `value = ''` uni o'sha zahoti
+    // bo'shatadi. Shuning uchun fayllarni HOZIR massivga ko'chirib olamiz;
+    // aks holda `setNewFiles` updater'i render paytida ishlaganda ro'yxat bo'sh
+    // bo'lib qoladi va fayl biriktirilmaydi.
+    const chosen = Array.from(files);
+    setNewFiles((prev) => [...prev, ...chosen]);
     if (fileRef.current) fileRef.current.value = '';
   };
 
