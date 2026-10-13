@@ -157,6 +157,16 @@ function NotificationBell() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Dars eslatmalarini tekshirish: Vercel (Hobby) da daqiqalik cron ishlamaydi,
+  // shuning uchun sayt ochiq turganda har 5 daqiqada serverga eslatib turamiz
+  // (server tomonda natija bir marta yuboriladi — takroriy xabar bo'lmaydi).
+  useEffect(() => {
+    const tick = () => api.post('/notifications/lesson-check').catch(() => {});
+    tick();
+    const id = setInterval(tick, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
   const openItem = async (n: NotificationItem) => {
     setOpen(false);
     if (!n.isRead) {

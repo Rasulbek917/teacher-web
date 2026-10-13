@@ -20,15 +20,33 @@ import {
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
 import { monthOf, yearOf } from '../common/date.util';
+import { PaymentReminderService } from '../telegram/payment-reminder.service';
 
 @Roles(Role.TEACHER)
 @Controller('payments')
 export class PaymentsController {
-  constructor(private payments: PaymentsService) {}
+  constructor(
+    private payments: PaymentsService,
+    private reminders: PaymentReminderService,
+  ) {}
 
   @Get()
   list(@CurrentUser() user: AuthUser, @Query() query: PaymentsQueryDto) {
     return this.payments.list(user.id, query);
+  }
+
+  /** Tanlangan oy uchun to'lov eslatmalarini darhol yuboradi. */
+  @Post('remind')
+  remind(
+    @CurrentUser() user: AuthUser,
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+  ) {
+    const now = new Date();
+    return this.reminders.runForTeacher(user.id, {
+      year: parseInt(year || String(yearOf(now)), 10),
+      month: parseInt(month || String(monthOf(now)), 10),
+    });
   }
 
   @Get('deadline')

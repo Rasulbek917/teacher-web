@@ -402,9 +402,59 @@ async function main() {
     ok(`telegram webhook ${cmd} ok`, (r.status === 200 || r.status === 201) && r.data?.ok === true, `${r.status} ${JSON.stringify(r.data)}`);
   }
 
+  // --- (yangi) Telegram self-link: o'qituvchi va o'quvchi o'z holatini ko'radi ---
+  r = await req('GET', '/users/me/telegram', { token: tToken });
+  ok(
+    'teacher telegram status returns link',
+    r.status === 200 && r.data?.available === true && r.data?.role === 'TEACHER' && /^https:\/\/t\.me\//.test(r.data?.url || ''),
+    `${r.status} ${JSON.stringify(r.data)}`,
+  );
+
+  r = await req('GET', '/users/me/telegram', { token: sToken });
+  ok(
+    'student telegram status returns link',
+    r.status === 200 && r.data?.available === true && r.data?.role === 'STUDENT' && !!r.data?.url,
+    `${r.status} ${JSON.stringify(r.data)}`,
+  );
+
+  // webhook /start <token> o'quvchini ulaydi
+  r = await req('POST', `/students/${sUserId}/telegram-link`, { token: tToken });
+  const sLinkToken = r.data?.token;
+  r = await req('POST', '/telegram/webhook', {
+    body: { message: { chat: { id: 990002 }, text: `/start ${sLinkToken}` } },
+    headers: tgSecret ? { 'x-telegram-bot-api-secret-token': tgSecret } : {},
+  });
+  ok('telegram webhook /start links student', (r.status === 200 || r.status === 201) && r.data?.ok === true, `${r.status}`);
+  r = await req('GET', '/users/me/telegram', { token: sToken });
+  ok('student telegram becomes linked after /start', r.status === 200 && r.data?.linked === true, `${r.status} ${JSON.stringify(r.data)}`);
+
+  // webhook /oylik (ota-ona) va /davomat (o'qituvchi) routing ishlaydi
+  for (const cmd of ['/oylik', '/davomat']) {
+    r = await req('POST', '/telegram/webhook', {
+      body: { message: { chat: { id: 990002 }, text: cmd } },
+      headers: tgSecret ? { 'x-telegram-bot-api-secret-token': tgSecret } : {},
+    });
+    ok(`telegram webhook ${cmd} ok`, (r.status === 200 || r.status === 201) && r.data?.ok === true, `${r.status}`);
+  }
+
+  r = await req('POST', '/users/me/telegram/unlink', { token: sToken });
+  ok('student self telegram unlink', (r.status === 200 || r.status === 201) && r.data?.linked === false, `${r.status}`);
+
   // --- to'lov eslatmalari cron endpointi (ulangan ota-ona yo'q -> yuborilmaydi) ---
   r = await req('POST', '/cron/payment-reminders', {});
   ok('payment reminders endpoint ok', (r.status === 200 || r.status === 201) && typeof r.data?.sent === 'number', `${r.status} ${JSON.stringify(r.data)}`);
+
+  // --- (yangi) qo'lda to'lov eslatmalarini yuborish (o'qituvchi) ---
+  r = await req('POST', '/payments/remind?year=2026&month=10', { token: tToken });
+  ok(
+    'teacher manual reminders run',
+    (r.status === 200 || r.status === 201) && typeof r.data?.sent === 'number',
+    `${r.status} ${JSON.stringify(r.data)}`,
+  );
+
+  // --- (yangi) dars eslatmalarini tekshirish (autentifikatsiyalangan tick) ---
+  r = await req('POST', '/notifications/lesson-check', { token: sToken });
+  ok('lesson-check endpoint ok', (r.status === 200 || r.status === 201) && r.data?.ok === true, `${r.status} ${JSON.stringify(r.data)}`);
 
   // --- chat: direct conversation + message ---
   r = await req('GET', '/chat/conversations', { token: tToken });

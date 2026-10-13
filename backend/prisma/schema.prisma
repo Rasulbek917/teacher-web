@@ -138,6 +138,11 @@ model TeacherProfile {
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   centerName String
   city       String
+  // O'qituvchi Telegram botga ulanganda to'ldiriladi (ixtiyoriy).
+  // Bot orqali oylik tushum, davomat va dars eslatmalarini oladi.
+  telegramChatId    String?
+  telegramLinkToken String?   @unique
+  telegramLinkedAt  DateTime?
   createdAt  DateTime @default(now())
 
   @@index([centerName])

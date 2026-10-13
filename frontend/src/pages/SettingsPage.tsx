@@ -1,13 +1,22 @@
-import React, { useRef, useState } from 'react';
-import { Camera, Globe, Moon, Sun, KeyRound } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Camera, Globe, Moon, Sun, KeyRound, Send } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useI18n, tokenStore } from '../i18n/i18n';
 import { useThemeCtx } from '../context/ThemeContext';
 import { api, errMsg, fileUrl } from '../lib/api';
-import { Button, Input, PageHeader, Avatar } from '../components/ui';
+import { Button, Input, PageHeader, Avatar, Badge } from '../components/ui';
 import { formatPhoneInput, isValidPhone } from '../lib/format';
 import { uploadFileChunked } from '../lib/upload';
+
+interface TelegramStatus {
+  available: boolean;
+  role?: string;
+  linked: boolean;
+  linkedAt?: string | null;
+  url: string;
+  botUsername?: string;
+}
 
 export function SettingsPage() {
   const { user, setUser } = useAuth();
@@ -27,6 +36,44 @@ export function SettingsPage() {
 
   const [pwd, setPwd] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
   const [savingPwd, setSavingPwd] = useState(false);
+
+  const [tg, setTg] = useState<TelegramStatus | null>(null);
+  const [tgBusy, setTgBusy] = useState(false);
+
+  const loadTelegram = async () => {
+    try {
+      const { data } = await api.get('/users/me/telegram');
+      setTg(data);
+    } catch {
+      setTg(null);
+    }
+  };
+
+  useEffect(() => {
+    loadTelegram();
+  }, []);
+
+  const openTelegram = () => {
+    if (!tg?.url) {
+      toast(t('telegramNotAvailable'), 'error');
+      return;
+    }
+    window.open(tg.url, '_blank', 'noopener');
+    toast(t('telegramOpenBot'));
+  };
+
+  const unlinkTelegram = async () => {
+    setTgBusy(true);
+    try {
+      await api.post('/users/me/telegram/unlink');
+      toast(t('telegramUnlinked'));
+      await loadTelegram();
+    } catch (e: any) {
+      toast(errMsg(e), 'error');
+    } finally {
+      setTgBusy(false);
+    }
+  };
 
   if (!user) return null;
 
@@ -184,6 +231,35 @@ export function SettingsPage() {
             </Button>
           </div>
         </section>
+
+        {/* Telegram bildirishnomalar */}
+        {tg?.available && (
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
+            <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-slate-100">
+              <Send className="h-5 w-5" /> {t('telegramLink')}
+            </h2>
+            <div className="mb-3">
+              <Badge color={tg.linked ? 'green' : 'slate'}>
+                {tg.linked ? t('telegramLinked') : t('telegramNotLinked')}
+              </Badge>
+            </div>
+            <p className="mb-4 text-sm text-slate-500">
+              {tg.role === 'TEACHER' ? t('telegramTeacherHint') : t('telegramStudentHint')}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {!tg.linked && (
+                <Button onClick={openTelegram}>
+                  <Send className="h-4 w-4" /> {t('telegramOpenBot')}
+                </Button>
+              )}
+              {tg.linked && (
+                <Button variant="outline" loading={tgBusy} onClick={unlinkTelegram}>
+                  {t('unlinkTelegram')}
+                </Button>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* Parol */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">

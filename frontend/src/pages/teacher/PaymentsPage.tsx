@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Wallet, AlertCircle, CheckCircle2, XCircle } from 'lucide-react';
+import { Wallet, AlertCircle, CheckCircle2, XCircle, Send } from 'lucide-react';
 import { api, errMsg } from '../../lib/api';
 import { useToast } from '../../context/ToastContext';
 import { useI18n } from '../../i18n/i18n';
@@ -37,6 +37,7 @@ export function PaymentsPage() {
   const [error, setError] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [savingDeadline, setSavingDeadline] = useState(false);
+  const [sendingReminders, setSendingReminders] = useState(false);
 
   const [target, setTarget] = useState<PaymentRow | null>(null);
   const [amount, setAmount] = useState('');
@@ -104,6 +105,24 @@ export function PaymentsPage() {
       toast(errMsg(e), 'error');
     } finally {
       setSavingDeadline(false);
+    }
+  };
+
+  const sendReminders = async () => {
+    setSendingReminders(true);
+    try {
+      const { data } = await api.post('/payments/remind', null, {
+        params: { year, month },
+      });
+      if (data?.sent > 0) {
+        toast(`${t('remindersSent')} (${data.sent})`);
+      } else {
+        toast(t('remindersNone'));
+      }
+    } catch (e: any) {
+      toast(errMsg(e), 'error');
+    } finally {
+      setSendingReminders(false);
     }
   };
 
@@ -196,6 +215,9 @@ export function PaymentsPage() {
           />
           <Button onClick={saveDeadline} loading={savingDeadline}>
             {t('save')}
+          </Button>
+          <Button variant="outline" onClick={sendReminders} loading={sendingReminders}>
+            <Send className="h-4 w-4" /> {t('sendReminders')}
           </Button>
         </div>
         <p className="mt-2 text-xs text-slate-400">{t('paymentDeadlineHint')}</p>

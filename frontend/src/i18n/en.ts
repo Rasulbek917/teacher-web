@@ -314,4 +314,13 @@ export const en: UzDict = {
   telegramUnlinked: 'Unlinked',
   telegramOpenBot: 'Open bot',
   deadlineSaved: 'Payment deadline saved',
+  telegramTeacherHint:
+    'If you link the bot: monthly income, today\'s attendance and a reminder 30 minutes before each lesson arrive in this Telegram.',
+  telegramStudentHint:
+    'If you link the bot: attendance, payment deadline and homework messages arrive in this Telegram.',
+  telegramNotAvailable: 'Telegram is not available for this account',
+  sendReminders: 'Send reminders',
+  remindersSent: 'Reminders sent',
+  remindersNone:
+    'No reminders sent: parents are not linked to Telegram or everyone has paid',
 };

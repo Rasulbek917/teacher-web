@@ -36,6 +36,17 @@ export class UsersController {
     return this.users.changePassword(user.id, dto);
   }
 
+  /** O'quvchi/o'qituvchi o'z Telegramini ulashi uchun holat va havola. */
+  @Get('me/telegram')
+  telegramStatus(@CurrentUser() user: AuthUser) {
+    return this.users.telegramStatus(user.id);
+  }
+
+  @Post('me/telegram/unlink')
+  telegramUnlink(@CurrentUser() user: AuthUser) {
+    return this.users.telegramUnlinkSelf(user.id);
+  }
+
   /**
    * Avatar fayli avval POST /api/files/upload orqali yuklanadi
    * (scope=AVATAR), so'ng shu yerda URL beriladi. URL avval shu

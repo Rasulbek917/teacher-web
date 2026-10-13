@@ -8,6 +8,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // Muddati o'tgandan keyin necha kun davomida eslatma yuboriladi (to'lanmaguncha).
 const OVERDUE_WINDOW_DAYS = 62;
 
+const PAYMENT_KINDS = [
+  'PAYMENT_WEEK_BEFORE',
+  'PAYMENT_DUE',
+  'PAYMENT_OVERDUE',
+] as const;
+
 export interface ReminderRunResult {
   checked: number;
   sent: number;
@@ -21,6 +27,10 @@ export interface ReminderRunResult {
  *   - D - 7 kun  -> PAYMENT_WEEK_BEFORE ("1 hafta qoldi")
  *   - D          -> PAYMENT_DUE ("bugun muddat")
  *   - D + 2, +4, ... -> PAYMENT_OVERDUE (har 2 kunda, to'lanmaguncha)
+ *
+ * Agar muddat kuni (D) eslatma yuborilmagan bo'lsa (masalan muddat o'sha kuni
+ * 09:00 dan keyin belgilangan bo'lsa), keyingi ishga tushishda "PAYMENT_DUE"
+ * qo'lda ushlanadi (catch-up) — shunda ota-ona baribir xabar oladi.
  *
  * Faqat to'lamagan (UNPAID) yoki qisman to'lagan (PARTIAL) o'quvchilarning
  * Telegramga ulangan ota-onalariga yuboriladi. Har bir xabar bir marta.
@@ -53,6 +63,24 @@ export class PaymentReminderService {
   }
 
   async run(): Promise<ReminderRunResult> {
+    return this.runCore();
+  }
+
+  /**
+   * Bitta o'qituvchi uchun eslatmalarni darhol ishga tushiradi (qo'lda
+   * "Eslatma yuborish" tugmasi). Ixtiyoriy ravishda oy bo'yicha cheklanadi.
+   */
+  async runForTeacher(
+    teacherId: string,
+    period?: { year: number; month: number },
+  ): Promise<ReminderRunResult> {
+    return this.runCore(teacherId, period);
+  }
+
+  private async runCore(
+    teacherFilter?: string,
+    period?: { year: number; month: number },
+  ): Promise<ReminderRunResult> {
     const result: ReminderRunResult = { checked: 0, sent: 0, skipped: 0 };
     if (!this.telegram.enabled()) {
       this.logger.warn('Telegram tokeni yo\'q — eslatmalar yuborilmadi.');
@@ -63,18 +91,25 @@ export class PaymentReminderService {
     const from = new Date(today.getTime() - OVERDUE_WINDOW_DAYS * DAY_MS);
     const to = new Date(today.getTime() + 8 * DAY_MS);
 
+    const deadlineWhere: any = {};
+    if (teacherFilter) deadlineWhere.teacherId = teacherFilter;
+    if (period) {
+      deadlineWhere.periodYear = period.year;
+      deadlineWhere.periodMonth = period.month;
+    } else {
+      deadlineWhere.dueDate = { gte: from, lte: to };
+    }
+
     const deadlines = await this.prisma.paymentDeadline.findMany({
-      where: { dueDate: { gte: from, lte: to } },
+      where: deadlineWhere,
     });
 
     for (const d of deadlines) {
       // offset = bugun - muddat (kunlarda): -7 = bir hafta oldin, 0 = muddat kuni, >0 = kechikkan.
       const offset = Math.round((today.getTime() - d.dueDate.getTime()) / DAY_MS);
-      let kind: string | null = null;
-      if (offset === -7) kind = 'PAYMENT_WEEK_BEFORE';
-      else if (offset === 0) kind = 'PAYMENT_DUE';
-      else if (offset > 0 && offset % 2 === 0) kind = 'PAYMENT_OVERDUE';
-      if (!kind) continue;
+      if (!(offset === -7 || (offset >= 0 && offset <= OVERDUE_WINDOW_DAYS))) {
+        continue;
+      }
 
       result.checked++;
 
@@ -112,13 +147,17 @@ export class PaymentReminderService {
           where: {
             periodYear: d.periodYear,
             periodMonth: d.periodMonth,
-            kind,
+            kind: { in: [...PAYMENT_KINDS] },
           },
-          select: { dedupeKey: true },
+          select: { dedupeKey: true, studentId: true, groupId: true },
         }),
       ]);
       const payMap = new Map(payments.map((p) => [`${p.studentId}:${p.groupId}`, p]));
       const logSet = new Set(logs.map((l) => l.dedupeKey));
+      // Biror marta eslatma yuborilgan (student:group) juftliklar.
+      const reminded = new Set(
+        logs.map((l) => `${l.studentId}:${l.groupId ?? ''}`),
+      );
 
       // Oy tugashidan keyin qo'shilganlarni o'tkazib yuborish uchun chegara.
       const periodEndExclusive = new Date(
@@ -133,6 +172,23 @@ export class PaymentReminderService {
         const payment = payMap.get(`${m.studentId}:${m.groupId}`);
         const amount = payment?.amount ?? 0;
         if (amount >= price) continue; // to'langan — eslatma kerak emas
+
+        const hadReminder = reminded.has(`${m.studentId}:${m.groupId}`);
+
+        let kind: string | null = null;
+        if (offset === -7) {
+          kind = 'PAYMENT_WEEK_BEFORE';
+        } else if (offset === 0) {
+          // Muddat kuni: oldin yuborilmagan bo'lsa hoziroq, aks holda hech narsa.
+          if (!hadReminder) kind = 'PAYMENT_DUE';
+        } else if (!hadReminder) {
+          // Muddat o'tib ketgan, lekin avval hech qanday eslatma bo'lmagan
+          // (masalan, muddat kunidan keyin belgilangan) — hoziroq xabar.
+          kind = 'PAYMENT_DUE';
+        } else if (offset % 2 === 0) {
+          kind = 'PAYMENT_OVERDUE';
+        }
+        if (!kind) continue;
 
         const chatId = m.student.studentProfile?.parentTelegramChatId;
         if (!chatId) {
@@ -165,6 +221,7 @@ export class PaymentReminderService {
             offsetDays: offset,
           });
           logSet.add(dedupeKey);
+          reminded.add(`${m.studentId}:${m.groupId}`);
           result.sent++;
         }
       }

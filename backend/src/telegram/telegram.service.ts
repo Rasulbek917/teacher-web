@@ -142,6 +142,8 @@ export class TelegramService implements OnModuleInit {
       commands: [
         { command: 'homework', description: 'Uyga vazifa' },
         { command: 'grade', description: 'Baholar' },
+        { command: 'oylik', description: "Oylik to'lov / tushum" },
+        { command: 'davomat', description: 'Bugungi davomat' },
         { command: 'stop', description: 'Ulanishni bekor qilish' },
         { command: 'start', description: 'Qayta ulanish' },
       ],
@@ -282,6 +284,23 @@ export class TelegramService implements OnModuleInit {
       `Hurmatli ota-ona! ⚠️\n\n` +
       `${input.studentName} ${input.dateStr} kuni ${input.groupName} darsiga kelmadi.\n\n` +
       `Iltimos, o'qituvchi bilan bog'laning.`
+    );
+  }
+
+  /** Dars boshlanishidan oldin yuboriladigan eslatma matni. */
+  buildLessonSoonMessage(input: {
+    groupName: string;
+    lessonTime: string;
+    minutesLeft: number;
+    forTeacher?: boolean;
+  }): string {
+    const min = Math.max(1, Math.round(input.minutesLeft));
+    return (
+      `⏰ Darsga ${min} daqiqa qoldi!\n\n` +
+      `${input.groupName} guruhi darsi ${input.lessonTime} da boshlanadi.\n` +
+      (input.forTeacher
+        ? `Iltimos, o'z vaqtida boring.`
+        : `Farzandingizni o'z vaqtida yuboring.`)
     );
   }
 

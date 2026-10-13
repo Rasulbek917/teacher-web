@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { dayOfWeek, formatDate, startOfDay, endOfDay } from '../common/date.util';
+import {
+  dayOfWeek,
+  formatDate,
+  monthOf,
+  startOfDay,
+  endOfDay,
+  yearOf,
+} from '../common/date.util';
+import { formatSum, monthNameUz } from './telegram.service';
 
 const WEEKDAYS_SHORT = ['Du', 'Se', 'Cho', 'Pa', 'Ju', 'Sh', 'Ya'];
 const WEEKDAYS_FULL = [
@@ -43,13 +51,16 @@ export class ParentInfoService {
             firstName: true,
             lastName: true,
             memberships: {
-              include: {
+              select: {
+                customPrice: true,
                 group: {
                   select: {
                     id: true,
                     name: true,
                     lessonDays: true,
                     lessonTime: true,
+                    monthlyPrice: true,
+                    teacherId: true,
                   },
                 },
               },
@@ -193,5 +204,72 @@ export class ParentInfoService {
     }
 
     return `📊 Baholar\n\n${blocks.join('\n\n')}`;
+  }
+
+  /** "/oylik" uchun matn: joriy oy to'lov summasi, holati va muddati. */
+  async oylikMessage(chatId: string): Promise<string> {
+    const students = await this.linkedStudents(chatId);
+    if (!students.length) return NOT_LINKED;
+
+    const y = yearOf();
+    const m = monthOf();
+
+    const teacherIds = [
+      ...new Set(
+        students.flatMap((s) => s.memberships.map((mm) => mm.group.teacherId)),
+      ),
+    ];
+    const [payments, deadlines] = await Promise.all([
+      this.prisma.payment.findMany({
+        where: {
+          studentId: { in: students.map((s) => s.id) },
+          periodYear: y,
+          periodMonth: m,
+        },
+      }),
+      this.prisma.paymentDeadline.findMany({
+        where: {
+          teacherId: { in: teacherIds },
+          periodYear: y,
+          periodMonth: m,
+        },
+      }),
+    ]);
+    const payMap = new Map(payments.map((p) => [`${p.studentId}:${p.groupId}`, p]));
+    const deadlineMap = new Map(
+      deadlines.map((d) => [d.teacherId, d.dueDate] as [string, Date]),
+    );
+
+    const blocks: string[] = [];
+    for (const s of students) {
+      const lines: string[] = [];
+      for (const mm of s.memberships) {
+        const g = mm.group;
+        const price = mm.customPrice ?? g.monthlyPrice;
+        const p = payMap.get(`${s.id}:${g.id}`);
+        const amount = p?.amount ?? 0;
+        let status: string;
+        if (amount <= 0) status = `❌ To'lanmagan`;
+        else if (amount >= price) status = `✅ To'langan (${formatSum(amount)})`;
+        else status = `⚠️ Qisman (${formatSum(amount)} / ${formatSum(price)})`;
+        const debt = Math.max(0, price - amount);
+        const dueDate = deadlineMap.get(g.teacherId);
+        lines.push(
+          `🏫 ${g.name}\n` +
+            `  Summa: ${formatSum(price)}\n` +
+            `  Holat: ${status}` +
+            (debt > 0 ? `\n  Qarz: ${formatSum(debt)}` : '') +
+            `\n  Muddat: ${dueDate ? formatDate(dueDate) : 'belgilanmagan'}`,
+        );
+      }
+      if (!lines.length) lines.push("Guruhga qo'shilmagan.");
+      blocks.push(
+        students.length > 1
+          ? `👤 ${s.firstName} ${s.lastName}\n${lines.join('\n')}`
+          : lines.join('\n'),
+      );
+    }
+
+    return `💳 Oylik to'lov — ${monthNameUz(m)} ${y}\n\n${blocks.join('\n\n')}`;
   }
 }

@@ -321,6 +321,15 @@ export const uz = {
   telegramUnlinked: 'Ulanish bekor qilindi',
   telegramOpenBot: 'Botni ochish',
   deadlineSaved: "To'lov muddati saqlandi",
+  telegramTeacherHint:
+    "Botni ulasangiz: oylik tushum, bugungi davomat va dars boshlanishidan 30 daqiqa oldin eslatma shu Telegramga keladi.",
+  telegramStudentHint:
+    "Botni ulasangiz: davomat, to'lov muddati va uyga vazifa haqidagi xabarlar shu Telegramga keladi.",
+  telegramNotAvailable: "Bu hisob uchun Telegram mavjud emas",
+  sendReminders: 'Eslatmalarni yuborish',
+  remindersSent: 'Eslatmalar yuborildi',
+  remindersNone:
+    "Eslatma yuborilmadi: ota-onalar Telegramga ulanmagan yoki hammasi to'langan",
 };
 
 export type UzDict = typeof uz;
