@@ -21,6 +21,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ChatModule } from './chat/chat.module';
 import { FilesModule } from './files/files.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { TelegramModule } from './telegram/telegram.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     ChatModule,
     FilesModule,
     DashboardModule,
+    TelegramModule,
   ],
   providers: [
     {

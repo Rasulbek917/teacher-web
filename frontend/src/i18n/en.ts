@@ -297,4 +297,21 @@ export const en: UzDict = {
   addGradeOptional: 'Grade is optional — you can save with a comment only',
   deleteHomeworkConfirm: 'Are you sure you want to delete this homework?',
   markReceivedShort: 'Receive',
+
+  // Payment deadline & Telegram notifications
+  paymentDeadline: 'Payment deadline',
+  paymentDeadlineHint:
+    'Pick a date for this month. Reminders go to unpaid parents 1 week before, on the deadline day, and every 2 days after.',
+  telegramLink: 'Link Telegram',
+  parentTelegram: 'Parent Telegram',
+  telegramLinked: 'Linked',
+  telegramNotLinked: 'Not linked',
+  copyLink: 'Copy link',
+  linkCopied: 'Link copied',
+  telegramLinkHint:
+    'Send the link to the parent. Once they press «Start» in the bot, they are linked to the student.',
+  unlinkTelegram: 'Unlink',
+  telegramUnlinked: 'Unlinked',
+  telegramOpenBot: 'Open bot',
+  deadlineSaved: 'Payment deadline saved',
 };

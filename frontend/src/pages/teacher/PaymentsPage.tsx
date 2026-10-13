@@ -35,6 +35,8 @@ export function PaymentsPage() {
   const [groupId, setGroupId] = useState('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [dueDate, setDueDate] = useState('');
+  const [savingDeadline, setSavingDeadline] = useState(false);
 
   const [target, setTarget] = useState<PaymentRow | null>(null);
   const [amount, setAmount] = useState('');
@@ -73,6 +75,37 @@ export function PaymentsPage() {
     }, 350);
     return () => clearTimeout(id);
   }, [search]);
+
+  const loadDeadline = useCallback(async () => {
+    try {
+      const { data } = await api.get('/payments/deadline', {
+        params: { year, month },
+      });
+      setDueDate(data?.dueDate ? String(data.dueDate).slice(0, 10) : '');
+    } catch {
+      /* jimgina o'tkazamiz */
+    }
+  }, [year, month]);
+
+  useEffect(() => {
+    loadDeadline();
+  }, [loadDeadline]);
+
+  const saveDeadline = async () => {
+    setSavingDeadline(true);
+    try {
+      await api.put('/payments/deadline', {
+        periodYear: year,
+        periodMonth: month,
+        dueDate: dueDate || null,
+      });
+      toast(t('deadlineSaved'));
+    } catch (e: any) {
+      toast(errMsg(e), 'error');
+    } finally {
+      setSavingDeadline(false);
+    }
+  };
 
   const openMark = (row: PaymentRow) => {
     setTarget(row);
@@ -149,6 +182,23 @@ export function PaymentsPage() {
           ))}
         </Select>
         <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('search')} />
+      </div>
+
+      {/* To'lov muddati (har oy uchun qo'lda tanlanadi) */}
+      <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-wrap items-end gap-3">
+          <Input
+            type="date"
+            label={t('paymentDeadline')}
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            className="sm:w-52"
+          />
+          <Button onClick={saveDeadline} loading={savingDeadline}>
+            {t('save')}
+          </Button>
+        </div>
+        <p className="mt-2 text-xs text-slate-400">{t('paymentDeadlineHint')}</p>
       </div>
 
       {data && (

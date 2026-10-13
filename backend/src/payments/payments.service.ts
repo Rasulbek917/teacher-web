@@ -7,8 +7,8 @@ import { PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../common/access/access.service';
 import { getPagination, paginate } from '../common/pagination';
-import { monthOf, yearOf } from '../common/date.util';
-import { MarkPaidDto, UpdatePaymentDto } from './dto/payment.dto';
+import { monthOf, yearOf, parseDateOnly } from '../common/date.util';
+import { MarkPaidDto, SetPaymentDeadlineDto, UpdatePaymentDto } from './dto/payment.dto';
 
 function computeStatus(amount: number, price: number): PaymentStatus {
   if (amount <= 0) return PaymentStatus.UNPAID;
@@ -95,7 +95,58 @@ export class PaymentsService {
     const sum = rows.reduce((a, r) => a + r.amount, 0);
     const unpaid = rows.filter((r) => r.status !== PaymentStatus.PAID).length;
 
-    return { ...paginate(paged, total, page, pageSize), sum, unpaid };
+    const deadline = await this.prisma.paymentDeadline.findUnique({
+      where: {
+        teacherId_periodYear_periodMonth: {
+          teacherId,
+          periodYear: year,
+          periodMonth: month,
+        },
+      },
+    });
+
+    return {
+      ...paginate(paged, total, page, pageSize),
+      sum,
+      unpaid,
+      deadline: deadline?.dueDate ?? null,
+    };
+  }
+
+  /** Tanlangan oy uchun to'lov muddatini qaytaradi. */
+  async getDeadline(teacherId: string, year: number, month: number) {
+    const deadline = await this.prisma.paymentDeadline.findUnique({
+      where: {
+        teacherId_periodYear_periodMonth: {
+          teacherId,
+          periodYear: year,
+          periodMonth: month,
+        },
+      },
+    });
+    return { dueDate: deadline?.dueDate ?? null };
+  }
+
+  /** Tanlangan oy uchun to'lov muddatini o'rnatadi (yoki o'chiradi). */
+  async setDeadline(teacherId: string, dto: SetPaymentDeadlineDto) {
+    const key = {
+      teacherId,
+      periodYear: dto.periodYear,
+      periodMonth: dto.periodMonth,
+    };
+    if (!dto.dueDate) {
+      await this.prisma.paymentDeadline
+        .delete({ where: { teacherId_periodYear_periodMonth: key } })
+        .catch(() => undefined);
+      return { dueDate: null };
+    }
+    const dueDate = parseDateOnly(dto.dueDate.slice(0, 10));
+    const saved = await this.prisma.paymentDeadline.upsert({
+      where: { teacherId_periodYear_periodMonth: key },
+      create: { ...key, dueDate },
+      update: { dueDate },
+    });
+    return { dueDate: saved.dueDate };
   }
 
   async markPaid(teacherId: string, dto: MarkPaidDto) {

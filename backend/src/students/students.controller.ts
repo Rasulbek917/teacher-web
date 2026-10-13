@@ -66,6 +66,16 @@ export class StudentsController {
     return this.students.setBlocked(user.id, id, dto.isBlocked);
   }
 
+  @Post(':id/telegram-link')
+  telegramLink(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.students.telegramLink(user.id, id);
+  }
+
+  @Post(':id/telegram-unlink')
+  telegramUnlink(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.students.telegramUnlink(user.id, id);
+  }
+
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.students.remove(user.id, id);

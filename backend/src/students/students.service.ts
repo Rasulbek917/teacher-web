@@ -6,10 +6,12 @@ import {
 } from '@nestjs/common';
 import { Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../common/access/access.service';
 import { FilesService } from '../files/files.service';
 import { RealtimeGateway } from '../chat/realtime.gateway';
+import { TelegramService } from '../telegram/telegram.service';
 import { getPagination, paginate } from '../common/pagination';
 import { sanitizeUser } from '../common/user.util';
 import {
@@ -25,6 +27,7 @@ export class StudentsService {
     private access: AccessService,
     private files: FilesService,
     private realtime: RealtimeGateway,
+    private telegram: TelegramService,
   ) {}
 
   /** Guruh chati ishtirokchisini qo'shadi. */
@@ -114,6 +117,7 @@ export class StudentsService {
       avatarUrl: s.avatarUrl,
       isBlocked: s.isBlocked,
       createdAt: s.createdAt,
+      telegramLinked: !!s.studentProfile?.parentTelegramChatId,
       groups: s.memberships.map((m) => ({
         id: m.group.id,
         name: m.group.name,
@@ -259,6 +263,44 @@ export class StudentsService {
       data: { passwordHash, tokenVersion: { increment: 1 } },
     });
     return { success: true };
+  }
+
+  /**
+   * Ota-onaga Telegram ulanish havolasini beradi (kerak bo'lsa token yaratadi).
+   * Havola: https://t.me/<bot>?start=<token>
+   */
+  async telegramLink(teacherId: string, id: string) {
+    await this.access.assertStudentInTeacherGroups(teacherId, id);
+    const profile = await this.prisma.studentProfile.findUnique({
+      where: { userId: id },
+    });
+    if (!profile) throw new NotFoundException("O'quvchi profili topilmadi");
+
+    let token = profile.telegramLinkToken;
+    if (!token) {
+      token = crypto.randomBytes(16).toString('hex');
+      await this.prisma.studentProfile.update({
+        where: { userId: id },
+        data: { telegramLinkToken: token },
+      });
+    }
+
+    return {
+      linked: !!profile.parentTelegramChatId,
+      botUsername: this.telegram.botUsername(),
+      token,
+      url: this.telegram.linkUrl(token),
+    };
+  }
+
+  /** Ota-onaning Telegram ulanishini bekor qiladi. */
+  async telegramUnlink(teacherId: string, id: string) {
+    await this.access.assertStudentInTeacherGroups(teacherId, id);
+    await this.prisma.studentProfile.updateMany({
+      where: { userId: id },
+      data: { parentTelegramChatId: null, telegramLinkedAt: null },
+    });
+    return { linked: false };
   }
 
   async setBlocked(teacherId: string, id: string, isBlocked: boolean) {

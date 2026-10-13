@@ -361,6 +361,34 @@ async function main() {
   r = await req('GET', '/my/payments', { token: sToken });
   ok('student my/payments', r.status === 200, `${r.status} ${JSON.stringify(r.data).slice(0, 200)}`);
 
+  // --- payment deadline (har oy uchun qo'lda tanlanadi) ---
+  r = await req('PUT', '/payments/deadline', {
+    token: tToken,
+    body: { periodYear: 2026, periodMonth: 10, dueDate: '2026-10-20' },
+  });
+  ok('set payment deadline', r.status === 200 && !!r.data?.dueDate, `${r.status} ${JSON.stringify(r.data)}`);
+
+  r = await req('GET', '/payments/deadline?year=2026&month=10', { token: tToken });
+  ok('get payment deadline', r.status === 200 && String(r.data?.dueDate).slice(0, 10) === '2026-10-20', `${r.status} ${JSON.stringify(r.data)}`);
+
+  r = await req('GET', '/payments?year=2026&month=10', { token: tToken });
+  ok('payments list includes deadline', r.status === 200 && String(r.data?.deadline).slice(0, 10) === '2026-10-20', `${r.status} ${JSON.stringify(r.data).slice(0, 160)}`);
+
+  // --- ota-ona Telegram ulash tokeni ---
+  r = await req('POST', `/students/${sUserId}/telegram-link`, { token: tToken });
+  ok(
+    'student telegram link generated',
+    (r.status === 200 || r.status === 201) && !!r.data?.token && /^https:\/\/t\.me\//.test(r.data?.url || ''),
+    `${r.status} ${JSON.stringify(r.data)}`,
+  );
+
+  r = await req('POST', `/students/${sUserId}/telegram-unlink`, { token: tToken });
+  ok('student telegram unlink', (r.status === 200 || r.status === 201) && r.data?.linked === false, `${r.status} ${JSON.stringify(r.data)}`);
+
+  // --- to'lov eslatmalari cron endpointi (ulangan ota-ona yo'q -> yuborilmaydi) ---
+  r = await req('POST', '/cron/payment-reminders', {});
+  ok('payment reminders endpoint ok', (r.status === 200 || r.status === 201) && typeof r.data?.sent === 'number', `${r.status} ${JSON.stringify(r.data)}`);
+
   // --- chat: direct conversation + message ---
   r = await req('GET', '/chat/conversations', { token: tToken });
   ok('teacher conversations list', r.status === 200, `${r.status}`);

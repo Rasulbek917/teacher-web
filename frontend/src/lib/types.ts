@@ -125,6 +125,7 @@ export interface StudentListItem {
   avatarUrl: string | null;
   isBlocked: boolean;
   createdAt: string;
+  telegramLinked?: boolean;
   groups: StudentGroupMember[];
 }
 export interface StudentDeletionInfo {
@@ -289,6 +290,7 @@ export interface PaymentRow {
 export interface PaymentsResponse extends Paginated<PaymentRow> {
   sum: number;
   unpaid: number;
+  deadline?: string | null;
 }
 export interface StudentPaymentMonth {
   year: number;

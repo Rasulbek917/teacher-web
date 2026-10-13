@@ -45,6 +45,23 @@ export class UpdatePaymentDto {
   paidAt?: string;
 }
 
+export class SetPaymentDeadlineDto {
+  @IsInt()
+  @Min(2000)
+  @Max(2100)
+  periodYear: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  periodMonth: number;
+
+  // "YYYY-MM-DD" yoki null (muddatni o'chirish uchun).
+  @IsOptional()
+  @IsString()
+  dueDate?: string | null;
+}
+
 export class PaymentsQueryDto {
   @IsOptional()
   @Type(() => Number)

@@ -2,7 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccessService } from '../common/access/access.service';
 import { computeStatus } from '../homework/homework.service';
-import { dateOnly, parseDateOnly } from '../common/date.util';
+import { dateOnly, parseDateOnly, formatDate } from '../common/date.util';
+import { TelegramService } from '../telegram/telegram.service';
 import { SaveAttendanceDto } from './dto/attendance.dto';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class AttendanceService {
   constructor(
     private prisma: PrismaService,
     private access: AccessService,
+    private telegram: TelegramService,
   ) {}
 
   /**
@@ -117,29 +119,89 @@ export class AttendanceService {
       ).map((m) => m.studentId),
     );
 
+    const validRecords = dto.records.filter((r) => memberIds.has(r.studentId));
+
+    // O'zgarishni aniqlash uchun shu sanadagi oldingi holat.
+    const prev = await this.prisma.attendance.findMany({
+      where: { groupId: dto.groupId, date },
+      select: { studentId: true, present: true },
+    });
+    const prevMap = new Map(prev.map((a) => [a.studentId, a.present]));
+
     await this.prisma.$transaction(
-      dto.records
-        .filter((r) => memberIds.has(r.studentId))
-        .map((r) =>
-          this.prisma.attendance.upsert({
-            where: {
-              studentId_groupId_date: {
-                studentId: r.studentId,
-                groupId: dto.groupId,
-                date,
-              },
-            },
-            create: {
+      validRecords.map((r) =>
+        this.prisma.attendance.upsert({
+          where: {
+            studentId_groupId_date: {
               studentId: r.studentId,
               groupId: dto.groupId,
               date,
-              present: r.present,
             },
-            update: { present: r.present },
-          }),
-        ),
+          },
+          create: {
+            studentId: r.studentId,
+            groupId: dto.groupId,
+            date,
+            present: r.present,
+          },
+          update: { present: r.present },
+        }),
+      ),
     );
 
+    // Ota-onaga xabar: faqat yangi "kelmadi" holatida (avval kelmagan bo'lmasa).
+    const newlyAbsent = validRecords.filter(
+      (r) => r.present === false && prevMap.get(r.studentId) !== false,
+    );
+    if (newlyAbsent.length) {
+      // Yuborish saqlashni buzmasligi kerak (xatolar yutiladi).
+      await this.notifyAbsent(
+        dto.groupId,
+        date,
+        newlyAbsent.map((r) => r.studentId),
+      ).catch(() => undefined);
+    }
+
     return { success: true };
+  }
+
+  /** "Kelmadi" belgilangan o'quvchilarning ota-onasiga Telegram xabar yuboradi. */
+  private async notifyAbsent(groupId: string, date: Date, studentIds: string[]) {
+    if (!this.telegram.enabled() || !studentIds.length) return;
+    const group = await this.prisma.group.findUnique({
+      where: { id: groupId },
+      select: { id: true, name: true },
+    });
+    const students = await this.prisma.user.findMany({
+      where: { id: { in: studentIds } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        studentProfile: { select: { parentTelegramChatId: true } },
+      },
+    });
+    const dateStr = formatDate(date);
+    const ymd = date.toISOString().slice(0, 10);
+    for (const s of students) {
+      const chatId = s.studentProfile?.parentTelegramChatId;
+      if (!chatId) continue;
+      const dedupeKey = `ABSENCE:${s.id}:${groupId}:${ymd}`;
+      if (await this.telegram.alreadyLogged(dedupeKey)) continue;
+      const text = this.telegram.buildAbsenceMessage({
+        studentName: `${s.firstName} ${s.lastName}`,
+        groupName: group?.name || '',
+        dateStr,
+      });
+      const ok = await this.telegram.sendMessage(chatId, text);
+      if (ok) {
+        await this.telegram.logNotification({
+          studentId: s.id,
+          groupId,
+          kind: 'ABSENCE',
+          dedupeKey,
+        });
+      }
+    }
   }
 }

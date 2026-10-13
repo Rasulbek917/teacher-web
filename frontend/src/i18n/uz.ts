@@ -304,6 +304,23 @@ export const uz = {
   addGradeOptional: "Baho ixtiyoriy — izoh bilan ham saqlash mumkin",
   deleteHomeworkConfirm: "Bu uy vazifasini o'chirmoqchimisiz?",
   markReceivedShort: 'Qabul qilish',
+
+  // To'lov muddati va Telegram bildirishnomalari
+  paymentDeadline: "To'lov muddati",
+  paymentDeadlineHint:
+    "Shu oy uchun sana tanlang. Muddatdan 1 hafta oldin, muddat kuni va keyin har 2 kunda to'lamagan ota-onalarga eslatma boradi.",
+  telegramLink: 'Telegram ulash',
+  parentTelegram: 'Ota-ona Telegram',
+  telegramLinked: 'Ulangan',
+  telegramNotLinked: 'Ulanmagan',
+  copyLink: 'Havolani nusxalash',
+  linkCopied: 'Havola nusxalandi',
+  telegramLinkHint:
+    "Havolani ota-onaga yuboring. Ota-ona botda «Start» bosgach, o'quvchi bilan bog'lanadi.",
+  unlinkTelegram: 'Ulanishni bekor qilish',
+  telegramUnlinked: 'Ulanish bekor qilindi',
+  telegramOpenBot: 'Botni ochish',
+  deadlineSaved: "To'lov muddati saqlandi",
 };
 
 export type UzDict = typeof uz;

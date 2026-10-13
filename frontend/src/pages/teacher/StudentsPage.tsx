@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pencil, Trash2, Plus, KeyRound, Ban, CheckCircle2, XCircle } from 'lucide-react';
+import { Pencil, Trash2, Plus, KeyRound, Ban, CheckCircle2, XCircle, Send } from 'lucide-react';
 import { api, errMsg } from '../../lib/api';
 import { useToast } from '../../context/ToastContext';
 import { useI18n } from '../../i18n/i18n';
@@ -60,6 +60,12 @@ export function StudentsPage() {
   const [delInfo, setDelInfo] = useState<StudentDeletionInfo | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const [tgTarget, setTgTarget] = useState<StudentListItem | null>(null);
+  const [tgInfo, setTgInfo] = useState<
+    { linked: boolean; url: string; botUsername: string } | null
+  >(null);
+  const [tgLoading, setTgLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -259,6 +265,43 @@ export function StudentsPage() {
     }
   };
 
+  const openTelegram = async (s: StudentListItem) => {
+    setTgTarget(s);
+    setTgInfo(null);
+    setTgLoading(true);
+    try {
+      const { data } = await api.post(`/students/${s.id}/telegram-link`);
+      setTgInfo(data);
+    } catch (e: any) {
+      toast(errMsg(e), 'error');
+      setTgTarget(null);
+    } finally {
+      setTgLoading(false);
+    }
+  };
+
+  const copyTgLink = async () => {
+    if (!tgInfo?.url) return;
+    try {
+      await navigator.clipboard.writeText(tgInfo.url);
+      toast(t('linkCopied'));
+    } catch {
+      toast(tgInfo.url);
+    }
+  };
+
+  const unlinkTg = async () => {
+    if (!tgTarget) return;
+    try {
+      await api.post(`/students/${tgTarget.id}/telegram-unlink`);
+      toast(t('telegramUnlinked'));
+      setTgInfo((i) => (i ? { ...i, linked: false } : i));
+      load();
+    } catch (e: any) {
+      toast(errMsg(e), 'error');
+    }
+  };
+
   return (
     <div>
       <PageHeader
@@ -314,6 +357,11 @@ export function StudentsPage() {
                           ) : (
                             <Badge color="green">{t('active')}</Badge>
                           )}
+                          {s.telegramLinked && (
+                            <Badge color="blue" dot>
+                              {t('telegramLinked')}
+                            </Badge>
+                          )}
                         </div>
                         <div className="truncate text-xs text-slate-400">@{s.login} · {s.phone}</div>
                         <div className="mt-1 flex flex-wrap gap-1.5">
@@ -330,6 +378,14 @@ export function StudentsPage() {
                       </div>
                     </div>
                     <div className="flex shrink-0 flex-wrap gap-1 sm:justify-end">
+                      <button
+                        type="button"
+                        onClick={() => openTelegram(s)}
+                        className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-900/30"
+                        title={t('telegramLink')}
+                      >
+                        <Send className="h-4 w-4" />
+                      </button>
                       <button
                         type="button"
                         onClick={() => openEdit(s)}
@@ -492,6 +548,67 @@ export function StudentsPage() {
         confirmDisabled={newPassword.length < 6}
         loading={savingPwd}
       />
+
+      {/* Telegram ulash */}
+      <Modal
+        open={!!tgTarget}
+        onClose={() => setTgTarget(null)}
+        title={t('telegramLink')}
+        size="md"
+        footer={<Button onClick={() => setTgTarget(null)}>{t('close')}</Button>}
+      >
+        {tgTarget && (
+          <div className="space-y-4">
+            <div className="rounded-xl bg-slate-100 p-3 text-sm dark:bg-slate-800">
+              <div className="font-semibold text-slate-800 dark:text-slate-100">
+                {tgTarget.firstName} {tgTarget.lastName}
+              </div>
+              <div className="text-xs text-slate-500">{tgTarget.parentPhone}</div>
+            </div>
+            {tgLoading ? (
+              <Spinner label={t('loading')} />
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-slate-600 dark:text-slate-300">
+                    {t('parentTelegram')}:
+                  </span>
+                  {tgInfo?.linked ? (
+                    <Badge color="blue" dot>
+                      {t('telegramLinked')}
+                    </Badge>
+                  ) : (
+                    <Badge color="slate">{t('telegramNotLinked')}</Badge>
+                  )}
+                </div>
+                {tgInfo?.url && (
+                  <div className="space-y-2">
+                    <div className="break-all rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      {tgInfo.url}
+                    </div>
+                    <p className="text-xs text-slate-400">{t('telegramLinkHint')}</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button size="sm" variant="outline" onClick={copyTgLink}>
+                        {t('copyLink')}
+                      </Button>
+                      <a href={tgInfo.url} target="_blank" rel="noreferrer">
+                        <Button size="sm" variant="subtle">
+                          {t('telegramOpenBot')}
+                        </Button>
+                      </a>
+                      {tgInfo.linked && (
+                        <Button size="sm" variant="ghost" onClick={unlinkTg}>
+                          {t('unlinkTelegram')}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </Modal>
 
       {/* Delete confirm */}
       <ConfirmDialog
