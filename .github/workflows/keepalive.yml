@@ -1,0 +1,52 @@
+# Repo faolligini avtomatik saqlash (keep-alive).
+#
+# Nega kerak: GitHub ommaviy repo'da 60 kun commit bo'lmasa, jadval bo'yicha
+# ishlaydigan workflow'larni (masalan "Dars eslatmalari") avtomatik o'chiradi.
+#
+# Bu workflow har oyning 1-kunida ishga tushadi va agar oxirgi commitdan 45 kun
+# o'tgan bo'lsa, bo'sh (empty) commit qo'shadi. Bu repo faolligini tiklaydi va
+# dars eslatmalari uzluksiz ishlashda davom etadi.
+#
+# Foydalanuvchi hech narsa qilishi shart emas.
+# Qo'lda sinash uchun: Actions -> "Repo faolligini saqlash" -> Run workflow.
+
+name: Repo faolligini saqlash
+
+on:
+  schedule:
+    # Har oyning 1-kuni, 03:17 UTC (Toshkent vaqti 08:17).
+    - cron: '17 3 1 * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Reponi olish
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Kerak bo'lsa bo'sh commit qo'shish
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          LAST=$(git log -1 --format=%ct)
+          NOW=$(date +%s)
+          DAYS=$(( (NOW - LAST) / 86400 ))
+          echo "Oxirgi commitdan $DAYS kun o'tgan."
+          if [ "$DAYS" -lt 45 ]; then
+            echo "Hali 45 kun bo'lmadi — bo'sh commit qo'shilmadi."
+            exit 0
+          fi
+          git commit --allow-empty -m "chore: faollikni saqlash (keep-alive)"
+          git push
+          echo "Bo'sh commit qo'shildi va yuborildi."
