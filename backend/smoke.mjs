@@ -394,6 +394,8 @@ async function main() {
 
   // --- Telegram webhook buyruqlari (routing; xabar yuborish bot tokeniga bog'liq) ---
   const tgSecret = process.env.TELEGRAM_WEBHOOK_SECRET || '';
+  const cronSecret = process.env.CRON_SECRET || '';
+  const cronQ = cronSecret ? `?secret=${encodeURIComponent(cronSecret)}` : '';
   for (const cmd of ['/homework', '/grade', '/help']) {
     r = await req('POST', '/telegram/webhook', {
       body: { message: { chat: { id: 990001 }, text: cmd } },
@@ -441,7 +443,7 @@ async function main() {
   ok('student self telegram unlink', (r.status === 200 || r.status === 201) && r.data?.linked === false, `${r.status}`);
 
   // --- to'lov eslatmalari cron endpointi (ulangan ota-ona yo'q -> yuborilmaydi) ---
-  r = await req('POST', '/cron/payment-reminders', {});
+  r = await req('POST', `/cron/payment-reminders${cronQ}`, {});
   ok('payment reminders endpoint ok', (r.status === 200 || r.status === 201) && typeof r.data?.sent === 'number', `${r.status} ${JSON.stringify(r.data)}`);
 
   // --- (yangi) qo'lda to'lov eslatmalarini yuborish (o'qituvchi) ---
@@ -455,6 +457,16 @@ async function main() {
   // --- (yangi) dars eslatmalarini tekshirish (autentifikatsiyalangan tick) ---
   r = await req('POST', '/notifications/lesson-check', { token: sToken });
   ok('lesson-check endpoint ok', (r.status === 200 || r.status === 201) && r.data?.ok === true, `${r.status} ${JSON.stringify(r.data)}`);
+
+  // --- (yangi) cron himoyasi: ?secret= qabul qilinadi, noto'g'ri kalit rad etiladi ---
+  if (cronSecret) {
+    r = await req('GET', `/cron/lesson-reminders${cronQ}`, {});
+    ok('cron lesson-reminders accepts ?secret=', r.status === 200 && r.data?.ok === true, `${r.status} ${JSON.stringify(r.data)}`);
+    r = await req('GET', '/cron/lesson-reminders?secret=notogri_kalit', {});
+    ok('cron lesson-reminders rejects wrong secret (403)', r.status === 403, `${r.status}`);
+  } else {
+    ok('cron secret check skipped (CRON_SECRET o\'rnatilmagan)', true);
+  }
 
   // --- chat: direct conversation + message ---
   r = await req('GET', '/chat/conversations', { token: tToken });

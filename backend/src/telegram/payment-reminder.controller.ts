@@ -1,4 +1,11 @@
-import { Controller, ForbiddenException, Get, Headers, Post } from '@nestjs/common';
+import {
+  Controller,
+  ForbiddenException,
+  Get,
+  Headers,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator';
 import { PaymentReminderService } from './payment-reminder.service';
 import { TelegramService } from './telegram.service';
@@ -7,9 +14,8 @@ import { TelegramService } from './telegram.service';
  * Tashqi scheduler (Vercel Cron yoki boshqa) orqali to'lov eslatmalarini
  * ishga tushirish endpointi. VPS'da `@Cron` o'zi ishlaydi.
  *
- * Vercel Cron GET so'rov yuboradi va (CRON_SECRET o'rnatilgan bo'lsa)
- * `Authorization: Bearer <CRON_SECRET>` sarlavhasini avtomatik qo'shadi.
- * Shuning uchun har ikkala metod (GET/POST) qo'llab-quvvatlanadi.
+ * Himoya: `CRON_SECRET` berilgan bo'lsa, `Authorization: Bearer <CRON_SECRET>`,
+ * `x-cron-secret: <CRON_SECRET>` yoki `?secret=<CRON_SECRET>` bo'lishi shart.
  */
 @Controller('cron')
 export class PaymentReminderController {
@@ -18,24 +24,40 @@ export class PaymentReminderController {
     private readonly telegram: TelegramService,
   ) {}
 
-  private assertCron(authorization?: string, secret?: string) {
+  private assertCron(
+    authorization?: string,
+    secret?: string,
+    querySecret?: string,
+  ) {
     const expected = process.env.CRON_SECRET;
     if (!expected) return;
     const bearer = authorization?.startsWith('Bearer ')
       ? authorization.slice(7)
       : undefined;
-    if (secret !== expected && bearer !== expected) {
+    if (
+      secret !== expected &&
+      bearer !== expected &&
+      querySecret !== expected
+    ) {
       throw new ForbiddenException('Ruxsat yo\'q');
     }
   }
 
-  private async runReminders(authorization?: string, secret?: string) {
-    this.assertCron(authorization, secret);
+  private async runReminders(
+    authorization?: string,
+    secret?: string,
+    querySecret?: string,
+  ) {
+    this.assertCron(authorization, secret, querySecret);
     return this.reminders.run();
   }
 
-  private async setupTelegram(authorization?: string, secret?: string) {
-    this.assertCron(authorization, secret);
+  private async setupTelegram(
+    authorization?: string,
+    secret?: string,
+    querySecret?: string,
+  ) {
+    this.assertCron(authorization, secret, querySecret);
     const setup = await this.telegram.setupWebhook();
     const info = await this.telegram.webhookInfo();
     return { setup, info };
@@ -46,8 +68,9 @@ export class PaymentReminderController {
   postReminders(
     @Headers('authorization') authorization?: string,
     @Headers('x-cron-secret') secret?: string,
+    @Query('secret') querySecret?: string,
   ) {
-    return this.runReminders(authorization, secret);
+    return this.runReminders(authorization, secret, querySecret);
   }
 
   @Public()
@@ -55,8 +78,9 @@ export class PaymentReminderController {
   getReminders(
     @Headers('authorization') authorization?: string,
     @Headers('x-cron-secret') secret?: string,
+    @Query('secret') querySecret?: string,
   ) {
-    return this.runReminders(authorization, secret);
+    return this.runReminders(authorization, secret, querySecret);
   }
 
   /** Telegram webhook'ni (qayta) o'rnatish — sozlashni tekshirish uchun. */
@@ -65,8 +89,9 @@ export class PaymentReminderController {
   postSetup(
     @Headers('authorization') authorization?: string,
     @Headers('x-cron-secret') secret?: string,
+    @Query('secret') querySecret?: string,
   ) {
-    return this.setupTelegram(authorization, secret);
+    return this.setupTelegram(authorization, secret, querySecret);
   }
 
   @Public()
@@ -74,7 +99,8 @@ export class PaymentReminderController {
   getSetup(
     @Headers('authorization') authorization?: string,
     @Headers('x-cron-secret') secret?: string,
+    @Query('secret') querySecret?: string,
   ) {
-    return this.setupTelegram(authorization, secret);
+    return this.setupTelegram(authorization, secret, querySecret);
   }
 }

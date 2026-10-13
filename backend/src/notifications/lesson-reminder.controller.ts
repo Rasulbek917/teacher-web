@@ -1,4 +1,11 @@
-import { Controller, ForbiddenException, Get, Headers, Post } from '@nestjs/common';
+import {
+  Controller,
+  ForbiddenException,
+  Get,
+  Headers,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator';
 import { LessonReminderService } from './lesson-reminder.service';
 
@@ -9,21 +16,30 @@ import { LessonReminderService } from './lesson-reminder.service';
  * - Vercel'da: doimiy process bo'lmagani uchun bu endpoint Vercel Cron yoki
  *   boshqa scheduler tomonidan chaqiriladi (GET yoki POST).
  *
- * Himoya: `CRON_SECRET` berilgan bo'lsa, so'rovda
- * `Authorization: Bearer <CRON_SECRET>` yoki `x-cron-secret: <CRON_SECRET>`
- * bo'lishi shart. (Vercel Cron aynan `Authorization: Bearer` yuboradi.)
+ * Himoya: `CRON_SECRET` berilgan bo'lsa, quyidagilardan biri bo'lishi shart:
+ *   - `Authorization: Bearer <CRON_SECRET>` (Vercel Cron shuni yuboradi),
+ *   - `x-cron-secret: <CRON_SECRET>`,
+ *   - `?secret=<CRON_SECRET>` (oddiy ping xizmatlari uchun qulay).
  */
 @Controller('cron')
 export class LessonReminderController {
   constructor(private readonly reminders: LessonReminderService) {}
 
-  private assertCron(authorization?: string, secret?: string) {
+  private assertCron(
+    authorization?: string,
+    secret?: string,
+    querySecret?: string,
+  ) {
     const expected = process.env.CRON_SECRET;
     if (expected) {
       const bearer = authorization?.startsWith('Bearer ')
         ? authorization.slice(7)
         : undefined;
-      if (secret !== expected && bearer !== expected) {
+      if (
+        secret !== expected &&
+        bearer !== expected &&
+        querySecret !== expected
+      ) {
         throw new ForbiddenException('Ruxsat yo\'q');
       }
     }
@@ -34,8 +50,9 @@ export class LessonReminderController {
   async runPost(
     @Headers('authorization') authorization?: string,
     @Headers('x-cron-secret') secret?: string,
+    @Query('secret') querySecret?: string,
   ) {
-    this.assertCron(authorization, secret);
+    this.assertCron(authorization, secret, querySecret);
     await this.reminders.checkLessons();
     return { ok: true };
   }
@@ -45,8 +62,9 @@ export class LessonReminderController {
   async runGet(
     @Headers('authorization') authorization?: string,
     @Headers('x-cron-secret') secret?: string,
+    @Query('secret') querySecret?: string,
   ) {
-    this.assertCron(authorization, secret);
+    this.assertCron(authorization, secret, querySecret);
     await this.reminders.checkLessons();
     return { ok: true };
   }

@@ -1,0 +1,43 @@
+# Dars eslatmalari ("darsga 30 daqiqa qoldi") uchun tashqi scheduler.
+#
+# Nega kerak: Vercel'ning bepul (Hobby) tarifida cron'ni kuniga 1 martadan
+# ko'p ishga tushirib bo'lmaydi. Shu sababli GitHub Actions har 5 daqiqada
+# backend'dagi himoyalangan endpointga murojaat qiladi.
+#
+# Ishlashi uchun repoga bitta secret qo'shilishi kerak:
+#   Settings -> Secrets and variables -> Actions -> New repository secret
+#   Name:  CRON_SECRET
+#   Value: (loyihadagi CRON_SECRET qiymati)
+# Secret qo'shilmaguncha bu workflow jimgina hech narsa qilmaydi.
+
+name: Dars eslatmalari
+
+on:
+  schedule:
+    # Har 5 daqiqada (GitHub Actions minimal oralig'i).
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: lesson-reminders
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Eslatmalarni ishga tushirish
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET sozlanmagan — o'tkazib yuborildi."
+            exit 0
+          fi
+          curl -fsS --max-time 30 --retry 2 --retry-delay 5 \
+            -X POST "https://teacher.aminboyevrasulbek.uz/api/cron/lesson-reminders" \
+            -H "x-cron-secret: $CRON_SECRET" \
+            -H "Content-Type: application/json"
+          echo ""
+          echo "OK"
