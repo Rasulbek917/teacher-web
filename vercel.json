@@ -24,5 +24,11 @@
       "source": "/(.*)",
       "destination": { "service": "frontend" }
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/payment-reminders",
+      "schedule": "0 4 * * *"
+    }
   ]
 }
