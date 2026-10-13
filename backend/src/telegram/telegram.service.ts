@@ -136,6 +136,18 @@ export class TelegramService implements OnModuleInit {
     return this.api('deleteWebhook', { drop_pending_updates: true });
   }
 
+  /** Bot menyusidagi buyruqlarni o'rnatadi (idempotent). */
+  async setCommands(): Promise<any> {
+    return this.api('setMyCommands', {
+      commands: [
+        { command: 'homework', description: 'Uyga vazifa' },
+        { command: 'grade', description: 'Baholar' },
+        { command: 'stop', description: 'Ulanishni bekor qilish' },
+        { command: 'start', description: 'Qayta ulanish' },
+      ],
+    });
+  }
+
   async webhookInfo(): Promise<any> {
     return this.api('getWebhookInfo');
   }
@@ -285,6 +297,12 @@ export class TelegramService implements OnModuleInit {
       this.logger.log(`Telegram bot: @${this.botUsername()}`);
     } catch (e) {
       this.logger.warn(`getMe xatosi: ${e}`);
+    }
+    // Bot menyusidagi buyruqlar (/homework, /grade, ...).
+    try {
+      await this.setCommands();
+    } catch (e) {
+      this.logger.warn(`setMyCommands xatosi: ${e}`);
     }
     // Webhook faqat haqiqiy (https) manzil mavjud bo'lganda o'rnatiladi.
     if (this.webhookUrl()) {

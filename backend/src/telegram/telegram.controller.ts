@@ -2,6 +2,7 @@ import { Body, Controller, Headers, Logger, Post } from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramService } from './telegram.service';
+import { ParentInfoService } from './parent-info.service';
 
 interface TgUpdate {
   message?: {
@@ -27,6 +28,7 @@ export class TelegramController {
   constructor(
     private prisma: PrismaService,
     private telegram: TelegramService,
+    private parentInfo: ParentInfoService,
   ) {}
 
   @Public()
@@ -67,9 +69,11 @@ export class TelegramController {
         await this.telegram.sendMessage(
           chatId,
           `Assalomu alaykum! 👋\n\n` +
-            `Bu bot o'quv markazi tomonidan ota-onalarga bildirishnoma yuboradi:\n` +
-            `• o'quvchi darsga kelmasa\n` +
-            `• oylik to'lov muddati yaqinlashganda\n\n` +
+            `Bu bot o'quv markazi tomonidan ota-onalarga xizmat qiladi:\n` +
+            `• o'quvchi darsga kelmasa — xabar beradi\n` +
+            `• oylik to'lov muddati yaqinlashganda — eslatadi\n` +
+            `• /homework — uyga vazifani ko'rsatadi\n` +
+            `• /grade — baholarni ko'rsatadi\n\n` +
             `Ulanish uchun o'qituvchi bergan havolani oching.\n` +
             `Ulanishni bekor qilish: /stop`,
         );
@@ -91,10 +95,26 @@ export class TelegramController {
       return;
     }
 
+    if (cmd === '/homework' || cmd === '/vazifa') {
+      const reply = await this.parentInfo.homeworkMessage(String(chatId));
+      await this.telegram.sendMessage(chatId, reply);
+      return;
+    }
+
+    if (cmd === '/grade' || cmd === '/grades' || cmd === '/baholar') {
+      const reply = await this.parentInfo.gradesMessage(String(chatId));
+      await this.telegram.sendMessage(chatId, reply);
+      return;
+    }
+
     // Boshqa har qanday matn — qisqa yordam.
     await this.telegram.sendMessage(
       chatId,
-      `Mavjud buyruqlar:\n/start — ulanish\n/stop — ulanishni bekor qilish`,
+      `Mavjud buyruqlar:\n` +
+        `/homework — uyga vazifa\n` +
+        `/grade — baholar\n` +
+        `/stop — ulanishni bekor qilish\n` +
+        `/start — qayta ulanish`,
     );
   }
 
@@ -125,6 +145,9 @@ export class TelegramController {
       `✅ Ulandingiz!\n\n` +
         `Endi ${profile.user.firstName} ${profile.user.lastName} haqidagi ` +
         `muhim xabarlar (darsga kelmasa, to'lov muddati) shu botga keladi.\n\n` +
+        `Shuningdek:\n` +
+        `• /homework — uyga vazifa\n` +
+        `• /grade — baholar\n\n` +
         `Ulanishni bekor qilish: /stop`,
     );
   }

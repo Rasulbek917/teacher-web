@@ -392,6 +392,16 @@ async function main() {
   r = await req('POST', `/students/${sUserId}/telegram-unlink`, { token: tToken });
   ok('student telegram unlink', (r.status === 200 || r.status === 201) && r.data?.linked === false, `${r.status} ${JSON.stringify(r.data)}`);
 
+  // --- Telegram webhook buyruqlari (routing; xabar yuborish bot tokeniga bog'liq) ---
+  const tgSecret = process.env.TELEGRAM_WEBHOOK_SECRET || '';
+  for (const cmd of ['/homework', '/grade', '/help']) {
+    r = await req('POST', '/telegram/webhook', {
+      body: { message: { chat: { id: 990001 }, text: cmd } },
+      headers: tgSecret ? { 'x-telegram-bot-api-secret-token': tgSecret } : {},
+    });
+    ok(`telegram webhook ${cmd} ok`, (r.status === 200 || r.status === 201) && r.data?.ok === true, `${r.status} ${JSON.stringify(r.data)}`);
+  }
+
   // --- to'lov eslatmalari cron endpointi (ulangan ota-ona yo'q -> yuborilmaydi) ---
   r = await req('POST', '/cron/payment-reminders', {});
   ok('payment reminders endpoint ok', (r.status === 200 || r.status === 201) && typeof r.data?.sent === 'number', `${r.status} ${JSON.stringify(r.data)}`);
