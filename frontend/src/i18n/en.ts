@@ -321,6 +321,9 @@ export const en: UzDict = {
   telegramNotAvailable: 'Telegram is not available for this account',
   sendReminders: 'Send reminders',
   remindersSent: 'Reminders sent',
+  remindersNotLinked: 'Not linked to Telegram',
+  remindersAlready: 'Reminder already sent',
+  remindersAllPaid: 'All students have paid — no reminder needed',
   remindersNone:
     'No reminders sent: parents are not linked to Telegram or everyone has paid',
 };

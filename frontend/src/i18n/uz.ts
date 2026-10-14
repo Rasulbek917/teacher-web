@@ -328,6 +328,9 @@ export const uz = {
   telegramNotAvailable: "Bu hisob uchun Telegram mavjud emas",
   sendReminders: 'Eslatmalarni yuborish',
   remindersSent: 'Eslatmalar yuborildi',
+  remindersNotLinked: 'Telegram ulanmagan',
+  remindersAlready: 'Eslatma allaqachon yuborilgan',
+  remindersAllPaid: "Barcha o'quvchilar to'lagan — eslatma kerak emas",
   remindersNone:
     "Eslatma yuborilmadi: ota-onalar Telegramga ulanmagan yoki hammasi to'langan",
 };

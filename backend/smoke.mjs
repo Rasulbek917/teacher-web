@@ -450,7 +450,11 @@ async function main() {
   r = await req('POST', '/payments/remind?year=2026&month=10', { token: tToken });
   ok(
     'teacher manual reminders run',
-    (r.status === 200 || r.status === 201) && typeof r.data?.sent === 'number',
+    (r.status === 200 || r.status === 201) &&
+      typeof r.data?.sent === 'number' &&
+      r.data?.manual === true &&
+      typeof r.data?.notLinked === 'number' &&
+      typeof r.data?.alreadySent === 'number',
     `${r.status} ${JSON.stringify(r.data)}`,
   );
 

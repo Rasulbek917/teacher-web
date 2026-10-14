@@ -44,7 +44,7 @@ export interface PaymentMessageInput {
   groupName: string;
   monthName: string;
   debt: number;
-  dueDate: Date;
+  dueDate: Date | null;
   offsetDays: number;
 }
 
@@ -263,6 +263,17 @@ export class TelegramService implements OnModuleInit {
         `${groupName ? `Guruh: ${groupName}\n` : ''}` +
         `To'lov summasi: ${debtStr}.\n\n` +
         `Iltimos, to'lovni amalga oshiring.`
+      );
+    }
+    if (kind === 'PAYMENT_REMIND') {
+      // O'qituvchi qo'lda yuborgan eslatma — jadvaldan qat'i nazar.
+      const overdue = offsetDays > 0;
+      return (
+        `Hurmatli ota-ona! 🔔\n\n` +
+        `${studentName} uchun ${monthName} oyi to'lovi: ${debtStr}.\n` +
+        `${groupName ? `Guruh: ${groupName}\n` : ''}` +
+        `${date ? `To'lov muddati: ${date}${overdue ? ` (${offsetDays} kun o'tdi)` : ''}.\n` : ''}` +
+        `\nIltimos, to'lovni o'z vaqtida amalga oshiring.`
       );
     }
     // PAYMENT_OVERDUE

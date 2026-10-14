@@ -114,10 +114,19 @@ export function PaymentsPage() {
       const { data } = await api.post('/payments/remind', null, {
         params: { year, month },
       });
-      if (data?.sent > 0) {
-        toast(`${t('remindersSent')} (${data.sent})`);
+      const sent = data?.sent ?? 0;
+      const notLinked = data?.notLinked ?? 0;
+      const already = data?.alreadySent ?? 0;
+      if (sent > 0) {
+        let msg = `${t('remindersSent')}: ${sent}`;
+        if (notLinked > 0) msg += ` · ${t('remindersNotLinked')}: ${notLinked}`;
+        toast(msg);
+      } else if (notLinked > 0) {
+        toast(`${t('remindersNotLinked')}: ${notLinked}`, 'info');
+      } else if (already > 0) {
+        toast(t('remindersAlready'), 'info');
       } else {
-        toast(t('remindersNone'));
+        toast(t('remindersAllPaid'), 'info');
       }
     } catch (e: any) {
       toast(errMsg(e), 'error');
