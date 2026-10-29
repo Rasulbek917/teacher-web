@@ -13,7 +13,7 @@ export interface GeneratedQuestion {
 export class AiTestsService {
   constructor(private readonly config: ConfigService) {}
 
-  async generate(dto: GenerateTestDto, materialText: string) {
+  async generate(dto: GenerateTestDto, materialText: string, document?: { mimeType: string; data: string }) {
     const apiKey = this.config.get<string>('GEMINI_API_KEY');
     if (!apiKey) throw new ServiceUnavailableException('AI xizmati sozlanmagan. GEMINI_API_KEY ni backend environment ga kiriting.');
 
@@ -38,7 +38,7 @@ export class AiTestsService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
+          contents: [{ parts: [{ text: prompt }, ...(document ? [{ inlineData: { mimeType: document.mimeType, data: document.data } }] : [])] }],
           generationConfig: { responseMimeType: 'application/json', temperature: 0.2 },
         }),
         signal: AbortSignal.timeout(90000),
@@ -79,9 +79,9 @@ export class AiTestsService {
     return { subject: dto.subject, topic: dto.topic, difficulty: dto.difficulty, questions, generatedCount: questions.length, requiresTeacherReview: true };
   }
 
-  async generateFromMaterial(dto: GenerateTestDto, extractedText: string) {
+  async generateFromMaterial(dto: GenerateTestDto, extractedText: string, document?: { mimeType: string; data: string }) {
     const material = [dto.materialText?.trim(), extractedText.trim()].filter(Boolean).join('\n\n');
-    if (material.length < 80) throw new BadRequestException('Test yaratish uchun kamida 80 ta belgidan iborat dars materiali kiriting.');
-    return this.generate(dto, material);
+    if (material.length < 80 && !document) throw new BadRequestException('Test yaratish uchun kamida 80 ta belgidan iborat dars materiali kiriting.');
+    return this.generate(dto, material || 'Savollarni biriktirilgan dars hujjati asosida yarating.', document);
   }
 }
