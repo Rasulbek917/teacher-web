@@ -1,6 +1,7 @@
 import { BadRequestException, Controller, Post, Body, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { inflateRawSync } from 'node:zlib';
 import { Role } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { AiTestsService } from './ai-tests.service';
@@ -28,18 +29,42 @@ export class AiTestsController {
   }))
   async generate(@Body() dto: GenerateTestDto, @UploadedFile() file?: Express.Multer.File) {
     let extractedText = '';
+    let document: { mimeType: string; data: string } | undefined;
     if (file) {
       if (file.size > MAX_FILE_SIZE) throw new BadRequestException('Fayl hajmi 8 MB dan oshmasligi kerak.');
       if (file.mimetype === 'application/pdf') {
-        const pdfParse = (await import('pdf-parse')).default;
-        const parsed = await pdfParse(file.buffer);
-        extractedText = parsed.text || '';
+        // Gemini accepts PDF as inline document data; keep file processing in the backend.
+        document = { mimeType: file.mimetype, data: file.buffer.toString('base64') };
       } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-        const mammoth = await import('mammoth');
-        const parsed = await mammoth.extractRawText({ buffer: file.buffer });
-        extractedText = parsed.value || '';
+        extractedText = this.extractDocxText(file.buffer);
       }
     }
-    return this.aiTests.generateFromMaterial(dto, extractedText);
+    return this.aiTests.generateFromMaterial(dto, extractedText, document);
+  }
+
+  /** Minimal DOCX text extraction using ZIP local-file records and the built-in zlib. */
+  private extractDocxText(buffer: Buffer): string {
+    const entryName = 'word/document.xml';
+    let offset = 0;
+    while (offset + 30 < buffer.length) {
+      const signature = buffer.readUInt32LE(offset);
+      if (signature !== 0x04034b50) { offset += 1; continue; }
+      const method = buffer.readUInt16LE(offset + 8);
+      const compressedSize = buffer.readUInt32LE(offset + 18);
+      const nameLength = buffer.readUInt16LE(offset + 26);
+      const extraLength = buffer.readUInt16LE(offset + 28);
+      const nameStart = offset + 30;
+      const name = buffer.toString('utf8', nameStart, nameStart + nameLength);
+      const dataStart = nameStart + nameLength + extraLength;
+      const dataEnd = dataStart + compressedSize;
+      if (dataEnd > buffer.length) break;
+      if (name === entryName) {
+        const compressed = buffer.subarray(dataStart, dataEnd);
+        const xml = (method === 0 ? compressed : method === 8 ? inflateRawSync(compressed) : Buffer.alloc(0)).toString('utf8');
+        return xml.replace(/<w:tab\\b[^>]*\\/>/g, '\\t').replace(/<w:br\\b[^>]*\\/>/g, '\\n').replace(/<\\/w:p>/g, '\\n').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"').replace(/&apos;/g, "'").replace(/[ \\t]+/g, ' ').trim();
+      }
+      offset = dataEnd;
+    }
+    throw new BadRequestException('DOCX faylidan matnni o‘qib bo‘lmadi. Fayl buzilmaganini tekshiring.');
   }
 }
