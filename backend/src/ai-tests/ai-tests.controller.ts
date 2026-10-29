@@ -1,6 +1,7 @@
 import { BadRequestException, Controller, Post, Body, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { Throttle } from '@nestjs/throttler';
 import { inflateRawSync } from 'node:zlib';
 import { Role } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -19,6 +20,7 @@ export class AiTestsController {
   constructor(private readonly aiTests: AiTestsService) {}
 
   @Post('generate')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @UseInterceptors(FileInterceptor('file', {
     storage: memoryStorage(),
     limits: { fileSize: MAX_FILE_SIZE, files: 1 },
@@ -28,6 +30,12 @@ export class AiTestsController {
     },
   }))
   async generate(@Body() dto: GenerateTestDto, @UploadedFile() file?: Express.Multer.File) {
+    if (file?.mimetype === 'application/pdf' && file.buffer.subarray(0, 5).toString('ascii') !== '%PDF-') {
+      throw new BadRequestException('PDF fayl formati noto‘g‘ri.');
+    }
+    if (file?.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' && file.buffer.subarray(0, 2).toString('ascii') !== 'PK') {
+      throw new BadRequestException('DOCX fayl formati noto‘g‘ri.');
+    }
     let extractedText = '';
     let document: { mimeType: string; data: string } | undefined;
     if (file) {
