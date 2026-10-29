@@ -15,6 +15,7 @@ import { GroupsPage } from './pages/teacher/GroupsPage';
 import { StudentsPage } from './pages/teacher/StudentsPage';
 import { MaterialsPage } from './pages/teacher/MaterialsPage';
 import { HomeworkPage } from './pages/teacher/HomeworkPage';
+import { AiTestGeneratorPage } from './pages/teacher/AiTestGeneratorPage';
 import { AttendancePage } from './pages/teacher/AttendancePage';
 import { GradesPage } from './pages/teacher/GradesPage';
 import { StatisticsPage } from './pages/teacher/StatisticsPage';
@@ -105,6 +106,14 @@ export function App() {
           element={
             <RequireRole roles={['TEACHER']}>
               <HomeworkPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/ai-tests"
+          element={
+            <RequireRole roles={['TEACHER']}>
+              <AiTestGeneratorPage />
             </RequireRole>
           }
         />

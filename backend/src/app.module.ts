@@ -22,6 +22,7 @@ import { ChatModule } from './chat/chat.module';
 import { FilesModule } from './files/files.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { TelegramModule } from './telegram/telegram.module';
+import { AiTestsModule } from './ai-tests/ai-tests.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { TelegramModule } from './telegram/telegram.module';
     FilesModule,
     DashboardModule,
     TelegramModule,
+    AiTestsModule,
   ],
   providers: [
     {
