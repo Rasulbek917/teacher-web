@@ -22,7 +22,9 @@ SECRET_KEY = os.environ.get(
     "dev-only-secret-key-o-zgartiring-productionda-32-belgidan-kam-bolmasin",
 )
 
-DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
+# Keep production safe when the deployment variable is missing. Local .env can
+# explicitly set DJANGO_DEBUG=1 for development.
+DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
 
 ALLOWED_HOSTS = [
     h.strip()
