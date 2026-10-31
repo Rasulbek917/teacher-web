@@ -392,6 +392,7 @@ private fun TeacherWebNativeApp() {
 private fun LoginScreen(loading: Boolean, error: String, onLogin: (String, String) -> Unit) {
     var login by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(Canvas).padding(horizontal = 26.dp), verticalArrangement = Arrangement.Center) {
         Text("TeacherWeb", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Brand)
         Spacer(Modifier.height(8.dp))
@@ -404,7 +405,20 @@ private fun LoginScreen(loading: Boolean, error: String, onLogin: (String, Strin
                 Spacer(Modifier.height(18.dp))
                 OutlinedTextField(login, { login = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Login") }, singleLine = true)
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(password, { password = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Parol") }, singleLine = true, visualTransformation = PasswordVisualTransformation())
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Parol") },
+                    singleLine = true,
+                    visualTransformation = if (passwordVisible) androidx.compose.ui.text.input.VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(if (passwordVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, contentDescription = if (passwordVisible) "Parolni yashirish" else "Parolni ko‘rsatish", tint = Muted)
+                        }
+                    }
+                )
                 if (error.isNotBlank()) { Spacer(Modifier.height(12.dp)); Text(error, color = Color(0xFFB42318), fontSize = 13.sp) }
                 Spacer(Modifier.height(18.dp))
                 Button(onClick = { onLogin(login, password) }, modifier = Modifier.fillMaxWidth().height(52.dp), enabled = !loading && login.isNotBlank() && password.isNotBlank(), shape = RoundedCornerShape(14.dp)) {
