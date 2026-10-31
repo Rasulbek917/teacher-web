@@ -1,4 +1,4 @@
 <resources>
-    <string name="site_url">https://teacher.aminboyevrasulbek.uz</string>
+    <string name="server_url">https://teacher.aminboyevrasulbek.uz</string>
     <string name="app_name">TeacherWeb</string>
 </resources>
