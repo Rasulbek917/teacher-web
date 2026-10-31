@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Bosh sahifa{% endblock %}
+{% block topbar_title %}O'qituvchi paneli{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex flex-wrap items-end justify-between gap-4">
+  <div>
+    <h1 class="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Salom, {{ user.first_name }} 👋</h1>
+    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">{{ month_label }} {{ year }} holatiga ko'ra markazingiz umumiy ko'rinishi.</p>
+  </div>
+  <form method="get" class="flex items-center gap-2">
+    <div class="relative">
+      <select name="year" data-auto-submit class="appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-xs font-semibold text-slate-700 shadow-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+        {% for y in years %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+      </select>
+      <i data-lucide="chevron-down" class="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"></i>
+    </div>
+    <div class="relative">
+      <select name="month" data-auto-submit class="appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-xs font-semibold text-slate-700 shadow-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+        <option value="1" {% if month == 1 %}selected{% endif %}>Yanvar</option>
+        <option value="2" {% if month == 2 %}selected{% endif %}>Fevral</option>
+        <option value="3" {% if month == 3 %}selected{% endif %}>Mart</option>
+        <option value="4" {% if month == 4 %}selected{% endif %}>Aprel</option>
+        <option value="5" {% if month == 5 %}selected{% endif %}>May</option>
+        <option value="6" {% if month == 6 %}selected{% endif %}>Iyun</option>
+        <option value="7" {% if month == 7 %}selected{% endif %}>Iyul</option>
+        <option value="8" {% if month == 8 %}selected{% endif %}>Avgust</option>
+        <option value="9" {% if month == 9 %}selected{% endif %}>Sentabr</option>
+        <option value="10" {% if month == 10 %}selected{% endif %}>Oktabr</option>
+        <option value="11" {% if month == 11 %}selected{% endif %}>Noyabr</option>
+        <option value="12" {% if month == 12 %}selected{% endif %}>Dekabr</option>
+      </select>
+      <i data-lucide="chevron-down" class="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"></i>
+    </div>
+  </form>
+</div>
+
+<div class="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+  {% include "partials/stat.html" with icon="school" label="Guruhlar" value=groups_count tone="violet" hint="Faol guruhlar" %}
+  {% include "partials/stat.html" with icon="users" label="O'quvchilar" value=students_count tone="cyan" hint="Barcha guruhlarda" %}
+  {% include "partials/stat.html" with icon="wallet" label="Oylik tushum" value=summary.income|som tone="emerald" hint=month_label|add:" "|add:year|stringformat:"s" %}
+  {% include "partials/stat.html" with icon="alert-circle" label="Qarzdorlar" value=summary.unpaid tone="rose" hint=summary.outstanding|som %}
+</div>
+
+<div class="mt-5 grid gap-5 lg:grid-cols-3">
+  <!-- To'lov holati -->
+  <div class="card p-5 lg:col-span-2">
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white"><i data-lucide="wallet" class="h-4 w-4 text-indigo-500"></i> To'lovlar yig'ilishi</h2>
+        <p class="mt-0.5 text-[11px] text-slate-400">{{ month_label }} {{ year }} · {{ summary.total }} ta yozuv</p>
+      </div>
+      <a href="{% url 'payments:list' %}?year={{ year }}&month={{ month }}" class="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400">Batafsil <i data-lucide="arrow-right" class="h-3.5 w-3.5"></i></a>
+    </div>
+
+    <div class="mt-5 flex items-end justify-between gap-3">
+      <p class="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">{{ summary.income|som }}</p>
+      <p class="text-xs font-semibold text-slate-400">reja: {{ summary.income|add:summary.outstanding|som }}</p>
+    </div>
+    <div class="mt-2 progress"><span style="width: {{ collection_rate }}%"></span></div>
+    <div class="mt-1.5 flex justify-between text-[11px] text-slate-400">
+      <span>Yig'ilish darajasi</span><span class="font-semibold text-emerald-600 dark:text-emerald-400">{{ collection_rate }}%</span>
+    </div>
+
+    <div class="mt-5 grid grid-cols-3 gap-3">
+      <a href="{% url 'payments:list' %}?year={{ year }}&month={{ month }}" class="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2.5 transition hover:bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/5">
+        <span class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400"><i data-lucide="check-circle-2" class="h-3 w-3"></i> To'langan</span>
+        <p class="mt-1 text-lg font-bold text-emerald-700 dark:text-emerald-300">{{ summary.paid }}</p>
+      </a>
+      <a href="{% url 'payments:list' %}?year={{ year }}&month={{ month }}" class="rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2.5 transition hover:bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/5">
+        <span class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400"><i data-lucide="circle-dot" class="h-3 w-3"></i> Qisman</span>
+        <p class="mt-1 text-lg font-bold text-amber-700 dark:text-amber-300">{{ summary.partial }}</p>
+      </a>
+      <a href="{% url 'payments:list' %}?year={{ year }}&month={{ month }}" class="rounded-xl border border-rose-100 bg-rose-50/60 px-3 py-2.5 transition hover:bg-rose-50 dark:border-rose-500/20 dark:bg-rose-500/5">
+        <span class="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-rose-600 dark:text-rose-400"><i data-lucide="alert-circle" class="h-3 w-3"></i> To'lanmagan</span>
+        <p class="mt-1 text-lg font-bold text-rose-700 dark:text-rose-300">{{ summary.unpaid }}</p>
+      </a>
+    </div>
+  </div>
+
+  <!-- Tezkor amallar -->
+  <div class="card p-5">
+    <h2 class="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white"><i data-lucide="zap" class="h-4 w-4 text-amber-500"></i> Tezkor amallar</h2>
+    <div class="mt-4 grid grid-cols-2 gap-2.5">
+      <a href="{% url 'academics:group_create' %}" class="flex flex-col items-start gap-2 rounded-xl border border-slate-100 bg-slate-50/70 p-3 transition hover:border-indigo-200 hover:bg-indigo-50/50 dark:border-slate-800 dark:bg-slate-800/40 dark:hover:border-indigo-500/30">
+        <i data-lucide="plus-circle" class="h-4 w-4 text-indigo-500"></i>
+        <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Yangi guruh</span>
+      </a>
+      <a href="{% url 'academics:student_create' %}" class="flex flex-col items-start gap-2 rounded-xl border border-slate-100 bg-slate-50/70 p-3 transition hover:border-cyan-200 hover:bg-cyan-50/50 dark:border-slate-800 dark:bg-slate-800/40 dark:hover:border-cyan-500/30">
+        <i data-lucide="user-plus" class="h-4 w-4 text-cyan-500"></i>
+        <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">O'quvchi</span>
+      </a>
+      <a href="{% url 'academics:homework_create' %}" class="flex flex-col items-start gap-2 rounded-xl border border-slate-100 bg-slate-50/70 p-3 transition hover:border-violet-200 hover:bg-violet-50/50 dark:border-slate-800 dark:bg-slate-800/40 dark:hover:border-violet-500/30">
+        <i data-lucide="clipboard-plus" class="h-4 w-4 text-violet-500"></i>
+        <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Vazifa</span>
+      </a>
+      <a href="{% url 'academics:attendance' %}" class="flex flex-col items-start gap-2 rounded-xl border border-slate-100 bg-slate-50/70 p-3 transition hover:border-emerald-200 hover:bg-emerald-50/50 dark:border-slate-800 dark:bg-slate-800/40 dark:hover:border-emerald-500/30">
+        <i data-lucide="calendar-check" class="h-4 w-4 text-emerald-500"></i>
+        <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Davomat</span>
+      </a>
+      <a href="{% url 'academics:material_create' %}" class="flex flex-col items-start gap-2 rounded-xl border border-slate-100 bg-slate-50/70 p-3 transition hover:border-sky-200 hover:bg-sky-50/50 dark:border-slate-800 dark:bg-slate-800/40 dark:hover:border-sky-500/30">
+        <i data-lucide="film" class="h-4 w-4 text-sky-500"></i>
+        <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">Material</span>
+      </a>
+      <a href="{% url 'payments:list' %}" class="flex flex-col items-start gap-2 rounded-xl border border-slate-100 bg-slate-50/70 p-3 transition hover:border-amber-200 hover:bg-amber-50/50 dark:border-slate-800 dark:bg-slate-800/40 dark:hover:border-amber-500/30">
+        <i data-lucide="credit-card" class="h-4 w-4 text-amber-500"></i>
+        <span class="text-xs font-semibold text-slate-700 dark:text-slate-200">To'lov</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<div class="mt-5 grid gap-5 lg:grid-cols-2">
+  <!-- Bugungi darslar -->
+  <div class="card">
+    <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+      <h2 class="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white"><i data-lucide="calendar-clock" class="h-4 w-4 text-indigo-500"></i> Bugungi darslar</h2>
+      <a href="{% url 'academics:attendance' %}" class="text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400">Davomat</a>
+    </div>
+    <div class="divide-y divide-slate-100 dark:divide-slate-800">
+      {% for lesson in lessons %}
+        <div class="flex items-center gap-3 px-5 py-3.5">
+          <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-[11px] font-bold text-amber-600 dark:bg-amber-500/10 dark:text-amber-300">{{ lesson.lesson_at|time:"H:i" }}</span>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{{ lesson.group.name }}</p>
+            <p class="text-[11px] text-slate-400">{{ lesson.group.students_count }} o'quvchi · {{ lesson.minutes }} daqiqadan keyin</p>
+          </div>
+          <a href="{% url 'academics:attendance' %}?group={{ lesson.group.pk }}" class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-indigo-600 dark:hover:bg-slate-800"><i data-lucide="arrow-right" class="h-4 w-4"></i></a>
+        </div>
+      {% empty %}
+        <div class="flex items-center gap-3 px-5 py-6 text-xs text-slate-400">
+          <i data-lucide="coffee" class="h-4 w-4"></i> Bugun yaqin orada dars yo'q.
+        </div>
+      {% endfor %}
+    </div>
+    <div class="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-[11px] text-slate-400 dark:border-slate-800">
+      <span>Bugungi davomat</span>
+      <span class="font-semibold text-slate-600 dark:text-slate-300">{{ attendance_today_present }}/{{ attendance_today_total }} keldi</span>
+    </div>
+  </div>
+
+  <!-- Oxirgi vazifalar -->
+  <div class="card">
+    <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+      <h2 class="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white"><i data-lucide="clipboard-list" class="h-4 w-4 text-violet-500"></i> Oxirgi uy vazifalari</h2>
+      <a href="{% url 'academics:homework_list' %}" class="text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400">Barchasi</a>
+    </div>
+    <div class="divide-y divide-slate-100 dark:divide-slate-800">
+      {% for hw in recent_homeworks %}
+        <a href="{% url 'academics:homework_detail' hw.pk %}" class="flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+          <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300"><i data-lucide="file-text" class="h-4 w-4"></i></span>
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{{ hw.title }}</p>
+            <p class="text-[11px] text-slate-400">{{ hw.group.name }} · {{ hw.created_at|date:"d.m.Y" }}</p>
+          </div>
+          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">{{ hw.submitted_count }}/{{ hw.total_students }}</span>
+        </a>
+      {% empty %}
+        <div class="flex items-center gap-3 px-5 py-6 text-xs text-slate-400">
+          <i data-lucide="inbox" class="h-4 w-4"></i> Hali vazifa qo'shilmagan.
+        </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% if unpaid_rows %}
+<div class="card mt-5">
+  <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+    <h2 class="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white"><i data-lucide="bell-ring" class="h-4 w-4 text-rose-500"></i> To'lovi kutilayotgan o'quvchilar</h2>
+    <a href="{% url 'payments:list' %}?year={{ year }}&month={{ month }}" class="text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400">To'lovlar</a>
+  </div>
+  <div class="divide-y divide-slate-100 dark:divide-slate-800">
+    {% for row in unpaid_rows|slice:":5" %}
+      <div class="flex items-center gap-3 px-5 py-3">
+        {% include "partials/avatar.html" with person=row.student size="h-8 w-8" %}
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{{ row.student.full_name }}</p>
+          <p class="text-[11px] text-slate-400">{{ row.group.name }}</p>
+        </div>
+        <span class="text-xs font-semibold text-rose-600 dark:text-rose-400">{{ row.price|som }}</span>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

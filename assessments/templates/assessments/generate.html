@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+  {% block title %}AI bilan test{% endblock %}
+{% block content %}
+<div class="mx-auto max-w-3xl p-6">
+  <a class="mb-4 inline-flex text-sm font-semibold text-indigo-600 hover:underline" href="{% url 'assessments:list' %}">← Testlarga qaytish</a>
+  <h1 class="text-2xl font-bold">AI bilan test</h1>
+  <p class="mb-6 mt-2 text-sm text-slate-500">Fan, mavzu, guruh va darajani tanlang. AI savollarni o'zi tuzadi; fayl kerak emas. Testni ko'rib chiqib, nashr qilganingizda guruh o'quvchilariga ochiladi.</p>
+  <form method="post" class="space-y-4 rounded-2xl bg-white p-6 shadow-sm dark:bg-slate-900">
+    {% csrf_token %}
+    {% for field in form %}
+      <div>
+        <label for="{{ field.id_for_label }}" class="mb-1 block text-sm font-semibold">{{ field.label }}</label>
+        {{ field.errors }}
+        {{ field }}
+        {% if field.help_text %}<p class="mt-1 text-xs text-slate-500">{{ field.help_text }}</p>{% endif %}
+      </div>
+    {% endfor %}
+    <button class="btn-primary">AI savollarni tuzsin</button>
+  </form>
+</div>
+{% endblock %}

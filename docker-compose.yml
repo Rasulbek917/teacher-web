@@ -3,65 +3,42 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-et_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-et_password}
-      POSTGRES_DB: ${POSTGRES_DB:-english_teachers}
+      POSTGRES_USER: ${POSTGRES_USER:-teacherweb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-teacherweb}
+      POSTGRES_DB: ${POSTGRES_DB:-teacherweb}
       TZ: Asia/Tashkent
-    ports:
-      # Faqat lokal mashinadan ochiladi (tashqi tarmoqqa chiqmaydi).
-      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-et_user} -d ${POSTGRES_DB:-english_teachers}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-teacherweb} -d ${POSTGRES_DB:-teacherweb}"]
       interval: 5s
       timeout: 5s
       retries: 10
-
-  backend:
-    build:
-      context: ./backend
+  web:
+    build: .
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+    env_file: .env
     environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      PORT: 3000
-      TZ: Asia/Tashkent
-      DATABASE_URL: ${DATABASE_URL:-postgresql://et_user:et_password@postgres:5432/english_teachers?schema=public}
-      JWT_SECRET: ${JWT_SECRET:-change_me_to_a_long_random_secret_string_min_32_chars}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      SUPERADMIN_LOGIN: ${SUPERADMIN_LOGIN:-superadmin}
-      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-superadmin123}
-      SUPERADMIN_FIRSTNAME: ${SUPERADMIN_FIRSTNAME:-Super}
-      SUPERADMIN_LASTNAME: ${SUPERADMIN_LASTNAME:-Admin}
-      SUPERADMIN_PHONE: ${SUPERADMIN_PHONE:-+998 90 000 00 00}
-      UPLOAD_DIR: /app/uploads
-      MAX_VIDEO_SIZE_MB: ${MAX_VIDEO_SIZE_MB:-200}
-      MAX_ATTACHMENT_SIZE_MB: ${MAX_ATTACHMENT_SIZE_MB:-10}
-      MAX_AVATAR_SIZE_MB: ${MAX_AVATAR_SIZE_MB:-5}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
-      LESSON_REMINDER_MINUTES: ${LESSON_REMINDER_MINUTES:-30}
-      LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
-      LOGIN_BLOCK_MINUTES: ${LOGIN_BLOCK_MINUTES:-5}
-    ports:
-      # Faqat lokal mashinadan ochiladi (tashqi tarmoqqa chiqmaydi).
-      - "127.0.0.1:3000:3000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-teacherweb}:${POSTGRES_PASSWORD:-teacherweb}@postgres:5432/${POSTGRES_DB:-teacherweb}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_DEBUG: ${DJANGO_DEBUG:-1}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-only-change-me}
+      DJANGO_SECURE_COOKIES: ${DJANGO_SECURE_COOKIES:-0}
+      DJANGO_SEED_DEMO: ${DJANGO_SEED_DEMO:-0}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
     volumes:
-      - uploads:/app/uploads
-
-  frontend:
-    build:
-      context: ./frontend
-      args:
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
-    restart: unless-stopped
-    depends_on:
-      - backend
+      - uploads:/app/media
+      - staticfiles:/app/staticfiles
     ports:
-      - "5173:80"
-
+      - "127.0.0.1:8000:8000"
 volumes:
   pgdata:
   uploads:
+  staticfiles:

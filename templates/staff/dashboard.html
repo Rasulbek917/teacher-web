@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Admin panel{% endblock %}
+{% block topbar_title %}Super Admin{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex flex-wrap items-end justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Admin panel</h1>
+    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Platformadagi barcha o'qituvchilar va markazlar nazorati.</p>
+  </div>
+  <a href="{% url 'staff:staff_teacher_create' %}" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-soft transition hover:bg-indigo-700">
+    <i data-lucide="user-plus" class="h-3.5 w-3.5"></i> Yangi o'qituvchi
+  </a>
+  <a href="{% url 'staff:staff_director_create' %}" class="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3.5 py-2 text-xs font-semibold text-indigo-700 dark:border-slate-700 dark:bg-slate-900 dark:text-indigo-300">
+    <i data-lucide="building-2" class="h-3.5 w-3.5"></i> Direktor qo'shish
+  </a>
+</div>
+
+<div class="grid grid-cols-2 gap-3.5 lg:grid-cols-5">
+  {% include "partials/stat.html" with icon="building-2" label="Direktorlar" value=directors_count tone="violet" %}
+  {% include "partials/stat.html" with icon="users" label="O'qituvchilar" value=teachers_count tone="indigo" %}
+  {% include "partials/stat.html" with icon="school" label="Guruhlar" value=groups_count tone="violet" %}
+  {% include "partials/stat.html" with icon="user-round" label="O'quvchilar" value=students_count tone="cyan" %}
+  {% include "partials/stat.html" with icon="wallet" label="Jami tushum" value=income tone="emerald" %}
+</div>
+
+<div class="card mt-5">
+  <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800"><h2 class="text-sm font-bold">Direktorlar</h2><a href="{% url 'staff:staff_directors' %}" class="text-xs font-semibold text-indigo-600">Barchasini ko'rish</a></div>
+  <div class="divide-y divide-slate-100 dark:divide-slate-800">{% for director in recent_directors %}<div class="flex items-center gap-3 px-5 py-3"><div class="min-w-0 flex-1"><p class="font-semibold">{{ director.full_name }}</p><p class="text-xs text-slate-500">{{ director.teacher_profile.center_name|default:"Markaz nomlanmagan" }} · @{{ director.login }}</p></div><span class="text-xs text-slate-400">{{ director.managed_users.count }} foydalanuvchi</span></div>{% empty %}<div class="p-5 text-sm text-slate-500">Direktor hali qo'shilmagan.</div>{% endfor %}</div>
+</div>
+
+<div class="card mt-5">
+  <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+    <h2 class="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white"><i data-lucide="user-check" class="h-4 w-4 text-indigo-500"></i> Oxirgi qo'shilgan o'qituvchilar</h2>
+    <a href="{% url 'staff:staff_teachers' %}" class="text-xs font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400">Barchasi</a>
+  </div>
+  <div class="divide-y divide-slate-100 dark:divide-slate-800">
+    {% for teacher in recent_teachers %}
+      <a href="{% url 'staff:staff_teacher_detail' teacher.pk %}" class="flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+        {% include "partials/avatar.html" with person=teacher size="h-9 w-9" %}
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-[13px] font-semibold text-slate-800 dark:text-slate-100">{{ teacher.full_name }}</p>
+          <p class="text-[11px] text-slate-400">{{ teacher.teacher_profile.center_name|default:"Markaz ko'rsatilmagan" }} · @{{ teacher.login }}</p>
+        </div>
+        <div class="text-right">
+          <p class="text-[11px] font-semibold text-slate-600 dark:text-slate-300">{{ teacher.teacher_groups.count }} guruh</p>
+          <p class="text-[10px] text-slate-400">{{ teacher.date_joined|date:"d.m.Y" }}</p>
+        </div>
+        <i data-lucide="chevron-right" class="h-4 w-4 text-slate-300 dark:text-slate-600"></i>
+      </a>
+    {% empty %}
+      {% include "partials/empty.html" with icon="users" title="O'qituvchi yo'q" text="Birinchi o'qituvchini qo'shing." link="/staff/teachers/new/" link_label="Qo'shish" %}
+    {% endfor %}
+  </div>
+</div>
+
+<div class="mt-5 grid gap-4 sm:grid-cols-3">
+  <a href="{% url 'staff:staff_directors' %}" class="card flex items-center gap-3 p-4 transition hover:shadow-soft">
+    <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300"><i data-lucide="building-2" class="h-5 w-5"></i></span>
+    <div><p class="text-xs font-bold">Direktorlar</p><p class="text-[11px] text-slate-400">Markazlarni boshqarish</p></div>
+  </a>
+  <a href="{% url 'staff:staff_teachers' %}" class="card flex items-center gap-3 p-4 transition hover:shadow-soft">
+    <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300"><i data-lucide="users" class="h-5 w-5"></i></span>
+    <div><p class="text-xs font-bold text-slate-800 dark:text-slate-100">O'qituvchilar</p><p class="text-[11px] text-slate-400">Ro'yxat va boshqaruv</p></div>
+  </a>
+  <a href="{% url 'notifications:list' %}" class="card flex items-center gap-3 p-4 transition hover:shadow-soft">
+    <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-300"><i data-lucide="bell" class="h-5 w-5"></i></span>
+    <div><p class="text-xs font-bold text-slate-800 dark:text-slate-100">Bildirishnomalar</p><p class="text-[11px] text-slate-400">Tizim xabarlari</p></div>
+  </a>
+  <a href="{% url 'chat:list' %}" class="card flex items-center gap-3 p-4 transition hover:shadow-soft">
+    <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-50 text-cyan-600 dark:bg-cyan-500/10 dark:text-cyan-300"><i data-lucide="message-circle" class="h-5 w-5"></i></span>
+    <div><p class="text-xs font-bold text-slate-800 dark:text-slate-100">Chat</p><p class="text-[11px] text-slate-400">Suhbatlar</p></div>
+  </a>
+</div>
+{% endblock %}

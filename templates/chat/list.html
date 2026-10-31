@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Chat{% endblock %}
+{% block topbar_title %}Chat{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Chat</h1>
+  <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Guruh suhbatlari va shaxsiy xabarlar.</p>
+</div>
+
+<div class="grid gap-5 lg:grid-cols-3">
+  <div class="card lg:col-span-2">
+    <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+      <h2 class="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white"><i data-lucide="message-circle" class="h-4 w-4 text-indigo-500"></i> Suhbatlar</h2>
+      <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">{{ items|length }} ta</span>
+    </div>
+    <div class="divide-y divide-slate-100 dark:divide-slate-800">
+      {% for item in items %}
+        <a href="{% url 'chat:room' item.conversation.pk %}" class="flex items-center gap-3 px-4 py-3.5 transition hover:bg-slate-50/70 sm:px-5 dark:hover:bg-slate-800/40">
+          <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl {% if item.conversation.group_id %}bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300{% else %}bg-cyan-50 text-cyan-600 dark:bg-cyan-500/10 dark:text-cyan-300{% endif %}">
+            <i data-lucide="{% if item.conversation.group_id %}users{% else %}user-round{% endif %}" class="h-5 w-5"></i>
+          </span>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <p class="truncate text-[13px] font-semibold text-slate-800 dark:text-slate-100">{{ item.title }}</p>
+              {% if item.conversation.group_id %}<span class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">guruh</span>{% endif %}
+            </div>
+            <p class="mt-0.5 truncate text-[11px] text-slate-400">
+              {% if item.last %}{% if item.last.sender_id == user.id %}Siz: {% else %}{{ item.last.sender.first_name }}: {% endif %}{{ item.last.text|default:"📎 fayl"|truncatechars:48 }}{% else %}Hali xabar yo'q{% endif %}
+            </p>
+          </div>
+          <div class="flex flex-col items-end gap-1">
+            {% if item.last %}<span class="text-[10px] text-slate-400">{{ item.last.created_at|date:"H:i" }}</span>{% endif %}
+            {% if item.unread %}<span class="flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-600 px-1.5 text-[10px] font-bold text-white">{{ item.unread }}</span>{% endif %}
+          </div>
+        </a>
+      {% empty %}
+        {% include "partials/empty.html" with icon="message-circle" title="Suhbat yo'q" text="Guruhga qo'shilganingizdan so'ng suhbatlar paydo bo'ladi." %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card h-fit">
+    <div class="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+      <h2 class="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white"><i data-lucide="user-plus" class="h-4 w-4 text-cyan-500"></i> Shaxsiy suhbat</h2>
+      <p class="mt-0.5 text-[11px] text-slate-400">Bog'lanish uchun odam tanlang.</p>
+    </div>
+    <div class="max-h-[520px] divide-y divide-slate-100 overflow-y-auto dark:divide-slate-800">
+      {% for contact in contacts %}
+        <div class="flex items-center gap-2.5 px-4 py-2.5">
+          {% include "partials/avatar.html" with person=contact size="h-8 w-8" %}
+          <div class="min-w-0 flex-1">
+            <p class="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">{{ contact.full_name }}</p>
+            <p class="text-[10px] text-slate-400">{{ contact.get_role_display }}</p>
+          </div>
+          <form method="post" action="{% url 'chat:start_direct' %}">
+            {% csrf_token %}
+            <input type="hidden" name="user_id" value="{{ contact.pk }}">
+            <button type="submit" class="rounded-lg bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-600 transition hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-300">Yozish</button>
+          </form>
+        </div>
+      {% empty %}
+        <div class="px-4 py-6 text-center text-[11px] text-slate-400">Kontaktlar topilmadi.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

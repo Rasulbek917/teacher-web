@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Kirish{% endblock %}
+
+{% block auth_content %}
+<div class="grid min-h-screen lg:grid-cols-2">
+  <!-- Chap panel -->
+  <div class="relative hidden overflow-hidden bg-slate-900 lg:block">
+    <div class="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(99,102,241,0.45),transparent_45%),radial-gradient(circle_at_80%_70%,rgba(56,189,248,0.35),transparent_45%)]"></div>
+    <div class="relative flex h-full flex-col justify-between p-12 text-white">
+      <a href="{% url 'core:home' %}" class="flex items-center gap-2.5">
+        <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500 shadow-lg shadow-indigo-500/30">
+          <i data-lucide="graduation-cap" class="h-5 w-5"></i>
+        </span>
+        <span class="text-lg font-bold tracking-tight">Teacher<span class="text-indigo-300">Web</span></span>
+      </a>
+
+      <div class="max-w-md">
+        <h1 class="text-3xl font-extrabold leading-tight tracking-tight">O'quv markazingizni bir joydan boshqaring.</h1>
+        <p class="mt-4 text-sm leading-relaxed text-slate-300">
+          Guruhlar, o'quvchilar, davomat, uy vazifalari, to'lovlar va chat — barchasi bitta
+          sodda va tez tizimda.
+        </p>
+        <div class="mt-8 grid grid-cols-2 gap-3">
+          <div class="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
+            <i data-lucide="school" class="h-5 w-5 text-indigo-300"></i>
+            <p class="mt-2 text-sm font-semibold">Guruhlar</p>
+            <p class="text-[11px] text-slate-400">Dars jadvali va a'zolar</p>
+          </div>
+          <div class="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
+            <i data-lucide="wallet" class="h-5 w-5 text-emerald-300"></i>
+            <p class="mt-2 text-sm font-semibold">To'lovlar</p>
+            <p class="text-[11px] text-slate-400">Oylik hisob va eslatmalar</p>
+          </div>
+          <div class="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
+            <i data-lucide="calendar-check" class="h-5 w-5 text-amber-300"></i>
+            <p class="mt-2 text-sm font-semibold">Davomat</p>
+            <p class="text-[11px] text-slate-400">Bir bosishda belgilash</p>
+          </div>
+          <div class="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
+            <i data-lucide="message-circle" class="h-5 w-5 text-cyan-300"></i>
+            <p class="mt-2 text-sm font-semibold">Chat</p>
+            <p class="text-[11px] text-slate-400">Guruh va shaxsiy suhbat</p>
+          </div>
+        </div>
+      </div>
+
+      <p class="text-xs text-slate-500">© {% now "Y" %} TeacherWeb · O'quv markazi boshqaruvi</p>
+    </div>
+  </div>
+
+  <!-- O'ng panel -->
+  <div class="flex items-center justify-center bg-slate-50 px-5 py-10 dark:bg-slate-950">
+    <div class="w-full max-w-md">
+      <div class="mb-8 flex items-center gap-2.5 lg:hidden">
+        <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white">
+          <i data-lucide="graduation-cap" class="h-5 w-5"></i>
+        </span>
+        <span class="text-lg font-bold tracking-tight text-slate-900 dark:text-white">Teacher<span class="text-indigo-600 dark:text-indigo-400">Web</span></span>
+      </div>
+
+      <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Hisobingizga kiring</h2>
+      <p class="mt-1.5 text-sm text-slate-500 dark:text-slate-400">Davom etish uchun login va parolingizni kiriting.</p>
+
+      <form method="post" class="mt-7 space-y-4" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+          <div class="rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+            {{ form.non_field_errors.0 }}
+          </div>
+        {% endif %}
+        {% include "partials/field.html" with field=form.login %}
+        {% include "partials/field.html" with field=form.password %}
+
+        <button type="submit" class="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-indigo-700 focus:outline-none focus:ring-4 focus:ring-indigo-500/20">
+          <i data-lucide="log-in" class="h-4 w-4"></i> Kirish
+        </button>
+      </form>
+
+      <p class="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
+        Hisobingiz yo'qmi?
+        <a href="{% url 'accounts:register' %}" class="font-semibold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400">Ro'yxatdan o'tish</a>
+      </p>
+
+      <div class="mt-8 rounded-xl border border-slate-200 bg-white/70 p-3.5 text-[11px] leading-relaxed text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+        <p class="mb-1 font-semibold text-slate-600 dark:text-slate-300">Demo hisoblar</p>
+        <p>O'qituvchi: <span class="font-mono">oqituvchi / teacher123</span></p>
+        <p>O'quvchi: <span class="font-mono">student1 / student123</span></p>
+        <p>Admin: <span class="font-mono">superadmin / superadmin123</span></p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

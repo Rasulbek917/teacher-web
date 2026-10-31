@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}{{ title }}{% endblock %}
+{% block topbar_title %}Chat / {{ title }}{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-3xl">
+  <div class="mb-4 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <a href="{% url 'chat:list' %}" class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800"><i data-lucide="arrow-left" class="h-4 w-4"></i></a>
+      <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-300"><i data-lucide="{% if conversation.group_id %}users{% else %}user-round{% endif %}" class="h-[18px] w-[18px]"></i></span>
+      <div>
+        <p class="text-sm font-bold text-slate-900 dark:text-white">{{ title }}</p>
+        <p class="text-[11px] text-slate-400">{{ participants|length }} ishtirokchi{% if conversation.group_id %} · {{ conversation.group.name }}{% endif %}</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="chat-root"
+       data-conversation="{{ conversation.pk }}"
+       data-messages-url="{% url 'chat:messages_json' conversation.pk %}"
+       data-send-url="{% url 'chat:send_json' conversation.pk %}"
+       data-last-id="{{ last_message_id }}"
+       class="card flex h-[calc(100vh-15rem)] min-h-[420px] flex-col overflow-hidden">
+    <div id="chat-messages" class="flex-1 space-y-2.5 overflow-y-auto p-4">
+      {% for message in chat_messages %}
+        <div class="flex {% if message.sender_id == user.id %}justify-end{% else %}justify-start{% endif %}" data-message-id="{{ message.id }}">
+          <div class="chat-bubble {% if message.sender_id == user.id %}chat-mine{% else %}chat-theirs{% endif %}">
+            {% if message.sender_id != user.id %}<div class="mb-0.5 text-[11px] font-semibold opacity-70">{{ message.sender.full_name }}</div>{% endif %}
+            {% if message.text %}<div class="whitespace-pre-wrap">{{ message.text }}</div>{% endif %}
+            {% if message.file or message.external_file_url %}
+              {% if message.type == "IMAGE" %}
+                <a href="{% url 'core:file' 'chat' message.pk %}" target="_blank" rel="noopener"><img src="{% url 'core:file' 'chat' message.pk %}" alt="rasm" class="mt-1 max-h-64 rounded-xl object-cover"></a>
+              {% elif message.type == "VIDEO" %}
+                <video src="{% url 'core:file' 'chat' message.pk %}" controls class="mt-1 max-h-64 w-full rounded-xl"></video>
+              {% elif message.type == "VOICE" %}
+                <audio src="{% url 'core:file' 'chat' message.pk %}" controls class="mt-1 w-full"></audio>
+              {% else %}
+                <a href="{% url 'core:file' 'chat' message.pk %}" target="_blank" rel="noopener" class="mt-1 inline-flex items-center gap-1 text-xs underline">📎 fayl</a>
+              {% endif %}
+            {% endif %}
+            <div class="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-60">
+              <span>{{ message.created_at|date:"H:i" }}</span>
+              {% if message.is_edited %}<span>· tahrirlangan</span>{% endif %}
+              {% if message.sender_id == user.id %}<span>· {% if message.reads.count > 1 %}o'qilgan{% else %}yuborildi{% endif %}</span>{% endif %}
+            </div>
+          </div>
+        </div>
+      {% empty %}
+        <div id="chat-empty" class="flex h-full flex-col items-center justify-center text-center">
+          <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-slate-800"><i data-lucide="message-square-dashed" class="h-6 w-6"></i></span>
+          <p class="mt-2 text-xs text-slate-400">Hali xabar yo'q. Birinchi bo'lib yozing!</p>
+        </div>
+      {% endfor %}
+    </div>
+
+    <form id="chat-form" method="post" enctype="multipart/form-data" class="border-t border-slate-100 p-3 dark:border-slate-800">
+      {% csrf_token %}
+      <div class="flex items-end gap-2">
+        <label class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-200 text-slate-400 transition hover:bg-slate-50 hover:text-indigo-600 dark:border-slate-700 dark:hover:bg-slate-800" title="Fayl biriktirish">
+          <i data-lucide="paperclip" class="h-4 w-4"></i>
+          <input id="chat-file" type="file" name="file" class="hidden">
+        </label>
+        <textarea id="chat-input" name="text" rows="1" placeholder="Xabar yozing..." class="max-h-32 min-h-[40px] w-full resize-none rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"></textarea>
+        <button type="submit" class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-soft transition hover:bg-indigo-700">
+          <i data-lucide="send" class="h-4 w-4"></i>
+        </button>
+      </div>
+      <p class="mt-1.5 px-1 text-[10px] text-slate-400">Enter — yuborish, Shift+Enter — yangi qator. Xabarlar avtomatik yangilanadi.</p>
+    </form>
+  </div>
+</div>
+{% endblock %}

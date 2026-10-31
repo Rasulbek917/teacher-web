@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Sozlamalar{% endblock %}
+{% block topbar_title %}Sozlamalar{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex flex-wrap items-end justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Sozlamalar</h1>
+    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Profil, interfeys va xavfsizlik sozlamalari.</p>
+  </div>
+  <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+    <i data-lucide="shield-check" class="h-3.5 w-3.5"></i> {{ user.get_role_display }}
+  </span>
+</div>
+
+<div class="grid gap-5 lg:grid-cols-[280px_1fr]">
+  <!-- Chap: profil kartasi -->
+  <div class="space-y-4">
+    <div class="card p-5 text-center">
+      <div class="mx-auto w-fit">
+        {% include "partials/avatar.html" with person=user size="h-20 w-20 text-xl" %}
+      </div>
+      <p class="mt-3 text-base font-bold text-slate-900 dark:text-white">{{ user.full_name }}</p>
+      <p class="text-xs text-slate-400">@{{ user.login }}</p>
+      {% if user.phone %}<p class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ user.phone }}</p>{% endif %}
+      {% if user.is_teacher and user.teacher_profile %}
+        <div class="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-left text-[11px] text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+          <p class="flex items-center gap-1.5"><i data-lucide="school" class="h-3 w-3"></i> {{ user.teacher_profile.center_name }}</p>
+          <p class="mt-1 flex items-center gap-1.5"><i data-lucide="map-pin" class="h-3 w-3"></i> {{ user.teacher_profile.city }}</p>
+        </div>
+      {% endif %}
+      <p class="mt-3 text-[10px] text-slate-400">Ro'yxatdan o'tgan: {{ user.date_joined|date:"d.m.Y" }}</p>
+    </div>
+
+    <div class="card overflow-hidden">
+      <a href="?tab=profile" class="flex items-center gap-2.5 px-4 py-3 text-sm font-medium transition {% if active_tab == 'profile' %}bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300{% else %}text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/60{% endif %}">
+        <i data-lucide="user-round" class="h-4 w-4"></i> Profil
+      </a>
+      <a href="?tab=preferences" class="flex items-center gap-2.5 border-t border-slate-100 px-4 py-3 text-sm font-medium transition dark:border-slate-800 {% if active_tab == 'preferences' %}bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300{% else %}text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/60{% endif %}">
+        <i data-lucide="sliders-horizontal" class="h-4 w-4"></i> Interfeys
+      </a>
+      <a href="?tab=password" class="flex items-center gap-2.5 border-t border-slate-100 px-4 py-3 text-sm font-medium transition dark:border-slate-800 {% if active_tab == 'password' %}bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300{% else %}text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800/60{% endif %}">
+        <i data-lucide="lock" class="h-4 w-4"></i> Parol
+      </a>
+      <a href="{% url 'integrations:telegram_open' %}" class="flex items-center gap-2.5 border-t border-slate-100 px-4 py-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800/60">
+        <i data-lucide="send" class="h-4 w-4"></i> Telegram ulanishi
+      </a>
+    </div>
+  </div>
+
+  <!-- O'ng: formalar -->
+  <div class="space-y-5">
+    {% if active_tab == 'profile' %}
+      <form method="post" enctype="multipart/form-data" class="card p-5 sm:p-6" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="profile">
+        <div class="mb-5">
+          <h2 class="text-base font-bold text-slate-900 dark:text-white">Profil ma'lumotlari</h2>
+          <p class="text-xs text-slate-400">Ism, familiya, telefon va rasmingizni yangilang.</p>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          {% include "partials/field.html" with field=profile_form.first_name %}
+          {% include "partials/field.html" with field=profile_form.last_name %}
+          {% include "partials/field.html" with field=profile_form.phone %}
+          {% include "partials/field.html" with field=profile_form.avatar %}
+        </div>
+        <div class="mt-6 flex justify-end">
+          <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-indigo-700">
+            <i data-lucide="save" class="h-4 w-4"></i> Saqlash
+          </button>
+        </div>
+      </form>
+
+      <div class="card p-5">
+        <div class="flex items-start gap-3">
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-300"><i data-lucide="info" class="h-[18px] w-[18px]"></i></span>
+          <div>
+            <p class="text-sm font-semibold text-slate-800 dark:text-slate-100">Login o'zgartirilmaydi</p>
+            <p class="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">Sizning loginingiz: <span class="font-mono font-semibold text-slate-700 dark:text-slate-200">{{ user.login }}</span>. Login o'zgartirish uchun administratorga murojaat qiling.</p>
+          </div>
+        </div>
+      </div>
+
+    {% elif active_tab == 'preferences' %}
+      <form method="post" class="card p-5 sm:p-6" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="preferences">
+        <div class="mb-5">
+          <h2 class="text-base font-bold text-slate-900 dark:text-white">Interfeys sozlamalari</h2>
+          <p class="text-xs text-slate-400">Til va rang mavzusini tanlang.</p>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          {% include "partials/field.html" with field=prefs_form.language %}
+          {% include "partials/field.html" with field=prefs_form.theme %}
+        </div>
+        <div class="mt-4 flex items-center gap-2.5 rounded-xl bg-slate-50 px-3.5 py-2.5 text-[11px] text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+          <i data-lucide="sun-moon" class="h-3.5 w-3.5 shrink-0"></i>
+          Mavzuni yuqoridagi <span class="font-semibold">quyosh/oy</span> tugmasi orqali ham tez almashtirish mumkin.
+        </div>
+        <div class="mt-6 flex justify-end">
+          <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-indigo-700">
+            <i data-lucide="save" class="h-4 w-4"></i> Saqlash
+          </button>
+        </div>
+      </form>
+
+    {% else %}
+      <form method="post" class="card p-5 sm:p-6" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="password">
+        <div class="mb-5">
+          <h2 class="text-base font-bold text-slate-900 dark:text-white">Parolni o'zgartirish</h2>
+          <p class="text-xs text-slate-400">Parolingiz o'zgargach, boshqa qurilmalardagi sessiyalar yopiladi.</p>
+        </div>
+        {% if password_form.non_field_errors %}
+          <div class="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs font-medium text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+            {{ password_form.non_field_errors.0 }}
+          </div>
+        {% endif %}
+        <div class="space-y-4">
+          {% include "partials/field.html" with field=password_form.old_password %}
+          {% include "partials/field.html" with field=password_form.new_password1 %}
+          {% include "partials/field.html" with field=password_form.new_password2 %}
+        </div>
+        <div class="mt-6 flex justify-end">
+          <button type="submit" class="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-indigo-700">
+            <i data-lucide="key-round" class="h-4 w-4"></i> Parolni yangilash
+          </button>
+        </div>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

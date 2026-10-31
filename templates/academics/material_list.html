@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Materiallar{% endblock %}
+{% block topbar_title %}Materiallar{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex flex-wrap items-end justify-between gap-3">
+  <div>
+    <h1 class="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Materiallar</h1>
+    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Jami {{ total }} ta material. Video va rasmlarni guruhlarga biriktiring.</p>
+  </div>
+  <a href="{% url 'academics:material_create' %}" class="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-soft transition hover:bg-indigo-700">
+    <i data-lucide="plus" class="h-3.5 w-3.5"></i> Yangi material
+  </a>
+</div>
+
+<form method="get" class="card mb-4 flex flex-wrap items-center gap-2 p-3">
+  <div class="relative min-w-[180px] flex-1">
+    <i data-lucide="search" class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"></i>
+    <input type="search" name="q" value="{{ query }}" placeholder="Sarlavha yoki tavsif..." class="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+  </div>
+  <select name="group" data-auto-submit class="appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-xs font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+    <option value="">Barcha guruhlar</option>
+    {% for g in groups %}<option value="{{ g.pk }}" {% if group_id == g.pk|stringformat:"s" %}selected{% endif %}>{{ g.name }}</option>{% endfor %}
+  </select>
+  <select name="type" data-auto-submit class="appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-xs font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+    <option value="">Barcha turlar</option>
+    <option value="VIDEO" {% if type_filter == "VIDEO" %}selected{% endif %}>Video</option>
+    <option value="IMAGE" {% if type_filter == "IMAGE" %}selected{% endif %}>Rasm</option>
+  </select>
+  <button type="submit" class="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">Filtrlash</button>
+  {% if query or group_id or type_filter %}
+    <a href="{% url 'academics:material_list' %}" class="inline-flex items-center gap-1 rounded-xl px-2.5 py-2 text-xs font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><i data-lucide="x" class="h-3.5 w-3.5"></i> Tozalash</a>
+  {% endif %}
+</form>
+
+{% if materials %}
+<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+  {% for material in materials %}
+    <div class="card group flex flex-col overflow-hidden">
+      <div class="relative aspect-video overflow-hidden bg-slate-100 dark:bg-slate-800">
+        {% if material.type == "IMAGE" and material.images.all %}
+          <img src="{% url 'core:file' 'material-image' material.images.all.0.id %}" alt="{{ material.title }}" class="h-full w-full object-cover transition duration-300 group-hover:scale-105">
+        {% elif material.youtube_embed %}
+          <div class="flex h-full w-full items-center justify-center bg-gradient-to-br from-rose-500/10 to-slate-900/10">
+            <span class="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-rose-600 shadow-lg dark:bg-slate-900/90"><i data-lucide="youtube" class="h-6 w-6"></i></span>
+          </div>
+        {% else %}
+          <div class="flex h-full w-full items-center justify-center bg-gradient-to-br from-indigo-500/10 to-violet-500/10">
+            <span class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-400"><i data-lucide="{% if material.type == 'VIDEO' %}play-square{% else %}image{% endif %}" class="h-6 w-6"></i></span>
+          </div>
+        {% endif %}
+        <span class="absolute left-2.5 top-2.5 rounded-full bg-slate-900/70 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur">{{ material.get_type_display }}</span>
+      </div>
+      <div class="flex flex-1 flex-col p-4">
+        <p class="line-clamp-2 text-sm font-bold text-slate-900 dark:text-white">{{ material.title }}</p>
+        <p class="mt-0.5 text-[11px] text-slate-400">{{ material.group.name }} · {{ material.created_at|date:"d.m.Y" }}</p>
+        {% if material.description %}<p class="mt-2 line-clamp-2 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">{{ material.description }}</p>{% endif %}
+        <div class="mt-auto flex items-center justify-between pt-3">
+          <div class="flex items-center gap-1.5 text-[11px] text-slate-400">
+            {% if material.youtube_url %}<span class="inline-flex items-center gap-1"><i data-lucide="link" class="h-3 w-3"></i> YouTube</span>{% endif %}
+            {% if material.file or material.external_file_url %}<span class="inline-flex items-center gap-1"><i data-lucide="paperclip" class="h-3 w-3"></i> Fayl</span>{% endif %}
+            {% if material.images.all %}<span class="inline-flex items-center gap-1"><i data-lucide="images" class="h-3 w-3"></i> {{ material.images.all|length }}</span>{% endif %}
+          </div>
+          <div class="flex items-center gap-1">
+            <a href="{% url 'academics:material_edit' material.pk %}" class="rounded-lg p-1.5 text-slate-400 transition hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-500/10" title="Tahrirlash"><i data-lucide="pencil" class="h-3.5 w-3.5"></i></a>
+            <form method="post" action="{% url 'academics:material_delete' material.pk %}" data-confirm="Materialni o'chirasizmi?">
+              {% csrf_token %}
+              <button type="submit" class="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10" title="O'chirish"><i data-lucide="trash-2" class="h-3.5 w-3.5"></i></button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% include "partials/pagination.html" %}
+{% else %}
+  <div class="card">
+    {% if query or group_id or type_filter %}
+      {% include "partials/empty.html" with icon="search-x" title="Material topilmadi" text="Filtrlarni o'zgartirib qayta urinib ko'ring." %}
+    {% else %}
+      {% include "partials/empty.html" with icon="film" title="Hali material yo'q" text="Video yoki rasm qo'shib, o'quvchilar bilan ulashing." link="/teacher/materials/new/" link_label="Material qo'shish" %}
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}

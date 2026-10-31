@@ -1,34 +1,3 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "services": {
-    "backend": {
-      "root": "backend",
-      "entrypoint": "Dockerfile.vercel"
-    },
-    "frontend": {
-      "root": "frontend",
-      "framework": "vite",
-      "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
-    }
-  },
-  "rewrites": [
-    {
-      "source": "/socket.io/(.*)",
-      "destination": { "service": "backend" }
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": { "service": "backend" }
-    },
-    {
-      "source": "/(.*)",
-      "destination": { "service": "frontend" }
-    }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron/payment-reminders",
-      "schedule": "0 4 * * *"
-    }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json"
 }

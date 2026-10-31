@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Direktor paneli{% endblock %}
+{% block topbar_title %}Direktor paneli{% endblock %}
+{% block content %}
+<div class="mb-6 flex flex-wrap items-end justify-between gap-3">
+  <div><h1 class="text-2xl font-extrabold">Markaz boshqaruvi</h1><p class="mt-1 text-sm text-slate-500">O'qituvchilar, o'quvchilar, to'lovlar va uy vazifalari nazorati.</p></div>
+  <form method="get" class="flex gap-2"><select class="form-control" name="month">{% for value,label in month_choices %}<option value="{{ value }}" {% if month == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><select class="form-control" name="year">{% for value in years %}<option value="{{ value }}" {% if year == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select><button class="btn-secondary">Ko'rish</button></form>
+</div>
+<div class="grid grid-cols-2 gap-3.5 xl:grid-cols-5">
+  {% include "partials/stat.html" with icon="users" label="O'qituvchilar" value=teachers_count tone="indigo" %}
+  {% include "partials/stat.html" with icon="school" label="Guruhlar" value=groups_count tone="violet" %}
+  {% include "partials/stat.html" with icon="user-round" label="O'quvchilar" value=students_count tone="cyan" %}
+  {% include "partials/stat.html" with icon="wallet" label=income_label value=income tone="emerald" %}
+  {% include "partials/stat.html" with icon="clipboard-check" label="Tekshirilmagan" value=unchecked_count tone="amber" %}
+</div>
+<div class="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+  <a class="card p-5 hover:shadow-soft" href="{% url 'directors:teachers' %}"><h2 class="font-bold">O'qituvchilar</h2><p class="mt-1 text-sm text-slate-500">O'qituvchi qo'shish va guruhlarini boshqarish</p></a>
+  <a class="card p-5 hover:shadow-soft" href="{% url 'directors:groups' %}"><h2 class="font-bold">Guruhlar</h2><p class="mt-1 text-sm text-slate-500">O'qituvchiga guruh biriktirish</p></a>
+  <a class="card p-5 hover:shadow-soft" href="{% url 'directors:students' %}"><h2 class="font-bold">O'quvchilar</h2><p class="mt-1 text-sm text-slate-500">O'quvchilarni guruhlarga qo'shish</p></a>
+  <a class="card p-5 hover:shadow-soft" href="{% url 'directors:payments' %}"><h2 class="font-bold">Oylik tushum</h2><p class="mt-1 text-sm text-slate-500">Markaz bo'yicha haqiqiy to'lovlar</p></a>
+  <a class="card p-5 hover:shadow-soft" href="{% url 'directors:reviews' %}"><h2 class="font-bold">Uy vazifalari nazorati</h2><p class="mt-1 text-sm text-slate-500">Topshirilgan, tekshirilgan va kutilayotgan ishlar</p></a>
+  <a class="card p-5 hover:shadow-soft" href="{% url 'directors:announcements' %}"><h2 class="font-bold">Bildirishnoma yuborish</h2><p class="mt-1 text-sm text-slate-500">Guruhga yoki barcha o'quvchilarga xabar</p></a>
+</div>
+<section class="card mt-5 overflow-hidden"><div class="border-b border-slate-100 px-5 py-4 dark:border-slate-800"><h2 class="font-bold">So'nggi uy vazifalari tekshiruvi</h2></div><div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-500 dark:bg-slate-800"><tr><th class="p-3">Vazifa</th><th class="p-3">Guruh / o'qituvchi</th><th class="p-3">Topshirilgan</th><th class="p-3">Tekshirilgan</th><th class="p-3">Kutilmoqda</th></tr></thead><tbody>{% for item in recent_homeworks %}<tr class="border-t border-slate-100 dark:border-slate-800"><td class="p-3 font-semibold">{{ item.title }}</td><td class="p-3">{{ item.group.name }} · {{ item.group.teacher.full_name }}</td><td class="p-3">{{ item.submitted_count }}</td><td class="p-3">{{ item.reviewed_count }}</td><td class="p-3">{{ item.waiting_count }}</td></tr>{% empty %}<tr><td class="p-4 text-slate-500" colspan="5">Hozircha uy vazifasi yo'q.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}

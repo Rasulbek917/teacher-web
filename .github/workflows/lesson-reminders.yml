@@ -1,8 +1,6 @@
 # Dars eslatmalari ("darsga 30 daqiqa qoldi") uchun tashqi scheduler.
 #
-# Nega kerak: Vercel'ning bepul (Hobby) tarifida cron'ni kuniga 1 martadan
-# ko'p ishga tushirib bo'lmaydi. Shu sababli GitHub Actions har 5 daqiqada
-# backend'dagi himoyalangan endpointga murojaat qiladi.
+# GitHub Actions har 5 daqiqada Django ilovasidagi himoyalangan eslatma endpointini chaqiradi.
 #
 # Ishlashi uchun repoga bitta secret qo'shilishi kerak:
 #   Settings -> Secrets and variables -> Actions -> New repository secret
@@ -36,7 +34,7 @@ jobs:
             exit 0
           fi
           curl -fsS --max-time 30 --retry 2 --retry-delay 5 \
-            -X POST "https://teacher.aminboyevrasulbek.uz/api/cron/lesson-reminders" \
+            -X POST "https://teacher.aminboyevrasulbek.uz/cron/reminders/" \
             -H "x-cron-secret: $CRON_SECRET" \
             -H "Content-Type: application/json"
           echo ""

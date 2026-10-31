@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block title %}Bildirishnoma yuborish{% endblock %}{% block content %}
+<div class="mx-auto max-w-3xl"><h1 class="mb-2 text-2xl font-bold">Bildirishnoma yuborish</h1><p class="mb-5 text-sm text-slate-500">Barcha o'quvchilar, barcha o'qituvchilar, bitta guruh yoki bitta o'qituvchini tanlang.</p><form method="post" class="card space-y-4 p-5">{% csrf_token %}{{ form.as_p }}<button class="btn-primary">Bildirishnoma yuborish</button></form></div>
+{% endblock %}
+{% block scripts %}<script>
+document.addEventListener('DOMContentLoaded',()=>{const audience=document.getElementById('id_audience'),group=document.getElementById('id_group'),teacher=document.getElementById('id_teacher');if(!audience||!group||!teacher)return;const groupRow=group.closest('p')||group.parentElement,teacherRow=teacher.closest('p')||teacher.parentElement;const update=()=>{groupRow.hidden=audience.value!=='GROUP';teacherRow.hidden=audience.value!=='TEACHER';};audience.addEventListener('change',update);update();});
+</script>{% endblock %}

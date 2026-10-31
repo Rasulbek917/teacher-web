@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% load ui %}
+{% block title %}Statistika{% endblock %}
+{% block topbar_title %}Statistika{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <h1 class="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">Statistika</h1>
+  <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Guruh bo'yicha davomat, topshiriq va baholar tahlili.</p>
+</div>
+
+<form method="get" class="card mb-4 flex flex-wrap items-end gap-3 p-3">
+  <div class="min-w-[170px] flex-1 space-y-1">
+    <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Guruh</label>
+    <select name="group" data-auto-submit class="w-full appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-xs font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+      {% for g in groups %}<option value="{{ g.pk }}" {% if group and g.pk == group.pk %}selected{% endif %}>{{ g.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="space-y-1">
+    <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Sana</label>
+    <input type="date" name="date" value="{{ anchor|date:'Y-m-d' }}" data-auto-submit class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+  </div>
+  <div class="space-y-1">
+    <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Davr</label>
+    <select name="unit" data-auto-submit class="appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3 pr-8 text-xs font-medium text-slate-700 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+      <option value="week" {% if unit == "week" %}selected{% endif %}>Hafta</option>
+      <option value="month" {% if unit == "month" %}selected{% endif %}>Oy</option>
+    </select>
+  </div>
+  <button type="submit" class="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">Ko'rsatish</button>
+</form>
+
+{% if data %}
+  <div class="grid grid-cols-2 gap-3.5 lg:grid-cols-5">
+    {% include "partials/stat.html" with icon="calendar-check" label="Davomat" value=data.totals.attendance_pct|pct tone="emerald" hint="Keldi / jami" %}
+    {% include "partials/stat.html" with icon="clipboard-check" label="Topshiriqlar" value=data.totals.submission_pct|pct tone="violet" hint="Topshirildi / kutilgan" %}
+    {% include "partials/stat.html" with icon="star" label="Uy vazifasi bahosi" value=data.totals.avg_grade|default_if_none:"—" tone="amber" %}
+    {% include "partials/stat.html" with icon="file-check-2" label="Test o'rtachasi" value=data.totals.test_average|default_if_none:"—" tone="rose" hint=data.totals.test_attempts|add:" urinish" %}
+    {% include "partials/stat.html" with icon="users" label="O'quvchilar" value=data.students_count tone="cyan" %}
+  </div>
+
+  <div class="card mt-5 overflow-hidden">
+    <div class="border-b border-slate-100 px-5 py-4 dark:border-slate-800"><h2 class="text-sm font-bold text-slate-900 dark:text-white">O'quvchilar bo'yicha haqiqiy ko'rsatkichlar</h2><p class="mt-1 text-[11px] text-slate-400">Faqat tanlangan davrdagi davomat, topshiriq va yakunlangan testlar.</p></div>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th>O'quvchi</th><th>Davomat</th><th>Vazifa topshirildi</th><th>Vazifa bahosi</th><th>Testlar</th><th>Test o'rtachasi</th></tr></thead><tbody>
+      {% for row in data.students %}<tr><td class="text-xs font-semibold">{{ row.student.full_name }}</td><td class="text-xs">{% if row.attendance_total %}{{ row.attendance_present }}/{{ row.attendance_total }} · {{ row.attendance_pct }}%{% else %}—{% endif %}</td><td class="text-xs">{% if row.homework_total %}{{ row.homework_submitted }}/{{ row.homework_total }} · {{ row.homework_pct }}%{% else %}—{% endif %}</td><td class="text-xs">{% if row.average_grade is not None %}{{ row.average_grade }}/100 ({{ row.graded_count }}){% else %}—{% endif %}</td><td class="text-xs">{{ row.test_attempts }}</td><td class="text-xs">{% if row.test_average is not None %}{{ row.test_average }}%{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="6" class="py-6 text-center text-xs text-slate-400">Bu guruhda o'quvchi yo'q.</td></tr>{% endfor %}
+    </tbody></table></div>
+  </div>
+
+  <div class="mt-5 grid gap-5 lg:grid-cols-2">
+    <div class="card p-5">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold text-slate-900 dark:text-white">Davomat tafsiloti</h2>
+        <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">{{ data.start|date:"d.m" }} – {{ data.end|date:"d.m.Y" }}</span>
+      </div>
+      <div class="mt-4 space-y-4">
+        <div>
+          <div class="mb-1.5 flex items-center justify-between text-xs"><span class="text-slate-500 dark:text-slate-400">Kelganlar</span><span class="font-bold text-emerald-600 dark:text-emerald-400">{{ data.totals.present }}</span></div>
+          <div class="progress"><span style="width: {% if data.totals.total %}{% widthratio data.totals.present data.totals.total 100 %}{% else %}0{% endif %}%; background-color: #10b981"></span></div>
+        </div>
+        <div>
+          <div class="mb-1.5 flex items-center justify-between text-xs"><span class="text-slate-500 dark:text-slate-400">Kelmaganlar</span><span class="font-bold text-rose-600 dark:text-rose-400">{{ data.totals.absent }}</span></div>
+          <div class="progress"><span style="width: {% widthratio data.totals.absent data.totals.total 100 %}%; background-color: #f43f5e"></span></div>
+        </div>
+        <div class="rounded-xl bg-slate-50 px-3.5 py-3 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+          Jami {{ data.totals.total }} ta davomat yozuvi qayd etilgan.
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-5">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold text-slate-900 dark:text-white">Topshiriq tafsiloti</h2>
+        <span class="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">{{ data.totals.homeworks }} vazifa</span>
+      </div>
+      <div class="mt-4 grid grid-cols-2 gap-3">
+        <div class="rounded-xl border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40">
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Kutilgan</p>
+          <p class="mt-1 text-lg font-bold text-slate-800 dark:text-slate-100">{{ data.totals.expected }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40">
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Topshirilgan</p>
+          <p class="mt-1 text-lg font-bold text-emerald-600 dark:text-emerald-400">{{ data.totals.submitted }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40">
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Baholangan</p>
+          <p class="mt-1 text-lg font-bold text-indigo-600 dark:text-indigo-400">{{ data.totals.graded }}</p>
+        </div>
+        <div class="rounded-xl border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/40">
+          <p class="text-[10px] font-semibold uppercase tracking-wide text-slate-400">O'rtacha</p>
+          <p class="mt-1 text-lg font-bold text-amber-600 dark:text-amber-400">{{ data.totals.avg_grade|default:"—" }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if bundle %}
+    <div class="card mt-5 p-5">
+      <h2 class="text-sm font-bold text-slate-900 dark:text-white">Hafta va oy taqqoslamasi</h2>
+      <div class="table-wrap mt-3">
+        <table class="data-table">
+          <thead><tr><th>Davr</th><th>Davomat</th><th>Topshiriq</th><th>Uy vazifasi bahosi</th><th>Test natijalari</th><th>Vazifalar</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="text-xs font-semibold text-slate-700 dark:text-slate-200">Hafta</td>
+              <td class="text-xs">{{ bundle.week.totals.attendance_pct|pct }}</td>
+              <td class="text-xs">{{ bundle.week.totals.submission_pct|pct }}</td>
+              <td class="text-xs">{{ bundle.week.totals.avg_grade|default_if_none:"—" }}</td>
+              <td class="text-xs">{{ bundle.week.totals.test_attempts }} · {{ bundle.week.totals.test_average|default_if_none:"—" }}%</td>
+              <td class="text-xs">{{ bundle.week.totals.homeworks }}</td>
+            </tr>
+            <tr>
+              <td class="text-xs font-semibold text-slate-700 dark:text-slate-200">Oy</td>
+              <td class="text-xs">{{ bundle.month.totals.attendance_pct|pct }}</td>
+              <td class="text-xs">{{ bundle.month.totals.submission_pct|pct }}</td>
+              <td class="text-xs">{{ bundle.month.totals.avg_grade|default_if_none:"—" }}</td>
+              <td class="text-xs">{{ bundle.month.totals.test_attempts }} · {{ bundle.month.totals.test_average|default_if_none:"—" }}%</td>
+              <td class="text-xs">{{ bundle.month.totals.homeworks }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+{% else %}
+  <div class="card">{% include "partials/empty.html" with icon="bar-chart-3" title="Ma'lumot yo'q" text="Statistikani ko'rish uchun guruh yarating yoki tanlang." link="/teacher/groups/new/" link_label="Guruh yaratish" %}</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,233 @@
+{% load static ui %}<!doctype html>
+<html lang="uz" class="h-full {% if theme == 'DARK' %}dark{% endif %}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{% block title %}Teacher Web{% endblock %} · O'quv markazi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui'] },
+          boxShadow: { soft: '0 10px 30px -12px rgba(15, 23, 42, 0.18)' },
+        },
+      },
+    };
+  </script>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  {% block head %}{% endblock %}
+</head>
+<body class="min-h-full bg-slate-50 text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-100">
+
+{% if user.is_authenticated %}
+<div class="min-h-screen lg:flex">
+
+  <!-- Sidebar -->
+  <aside id="sidebar"
+         class="fixed inset-y-0 left-0 z-50 flex w-72 -translate-x-full flex-col border-r border-slate-200 bg-white transition-transform duration-200 lg:static lg:z-auto lg:translate-x-0 dark:border-slate-800 dark:bg-slate-900">
+    <div class="flex h-16 items-center justify-between px-5">
+      <a href="{% url 'core:home' %}" class="flex items-center gap-2.5">
+        <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-soft">
+          <i data-lucide="graduation-cap" class="h-5 w-5"></i>
+        </span>
+        <span class="text-[15px] font-bold tracking-tight text-slate-900 dark:text-white">Teacher<span class="text-indigo-600 dark:text-indigo-400">Web</span></span>
+      </a>
+      <button id="sidebar-close" class="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden dark:hover:bg-slate-800" aria-label="Yopish">
+        <i data-lucide="x" class="h-5 w-5"></i>
+      </button>
+    </div>
+
+    <nav class="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4">
+      {% with vn=request.resolver_match.view_name %}
+      {% if is_teacher %}
+        <p class="px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Boshqaruv</p>
+        <a href="{% url 'academics:teacher_dashboard' %}" class="nav-link {% if vn == 'academics:teacher_dashboard' %}active{% endif %}"><i data-lucide="layout-dashboard" class="h-[18px] w-[18px]"></i> Bosh sahifa</a>
+        <a href="{% url 'academics:group_list' %}" class="nav-link {% if 'group' in vn %}active{% endif %}"><i data-lucide="school" class="h-[18px] w-[18px]"></i> Guruhlar</a>
+        <a href="{% url 'academics:student_list' %}" class="nav-link {% if 'student' in vn and vn != 'academics:statistics' %}active{% endif %}"><i data-lucide="users" class="h-[18px] w-[18px]"></i> O'quvchilar</a>
+        <a href="{% url 'academics:material_list' %}" class="nav-link {% if 'material' in vn %}active{% endif %}"><i data-lucide="play-square" class="h-[18px] w-[18px]"></i> Materiallar</a>
+        <a href="{% url 'academics:homework_list' %}" class="nav-link {% if 'homework' in vn or 'submission' in vn %}active{% endif %}"><i data-lucide="clipboard-list" class="h-[18px] w-[18px]"></i> Uy vazifalari</a>
+        <p class="px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">O'quv jarayoni</p>
+        <a href="{% url 'academics:attendance' %}" class="nav-link {% if 'attendance' in vn %}active{% endif %}"><i data-lucide="calendar-check" class="h-[18px] w-[18px]"></i> Davomat</a>
+        <a href="{% url 'academics:grades' %}" class="nav-link {% if vn == 'academics:grades' or 'grade_student' in vn %}active{% endif %}"><i data-lucide="star" class="h-[18px] w-[18px]"></i> Baholar</a>
+        <a href="{% url 'assessments:assistant' %}" class="nav-link {% if 'assistant' in vn %}active{% endif %}"><i data-lucide="sparkles" class="h-[18px] w-[18px]"></i> AI yordamchi</a>
+        <a href="{% url 'assessments:list' %}" class="nav-link {% if 'assessments' in vn %}active{% endif %}"><i data-lucide="file-check-2" class="h-[18px] w-[18px]"></i> Testlar</a>
+        <a href="{% url 'academics:statistics' %}" class="nav-link {% if vn == 'academics:statistics' %}active{% endif %}"><i data-lucide="bar-chart-3" class="h-[18px] w-[18px]"></i> Statistika</a>
+        <a href="{% url 'payments:list' %}" class="nav-link {% if vn == 'payments:list' %}active{% endif %}"><i data-lucide="wallet" class="h-[18px] w-[18px]"></i> To'lovlar</a>
+      {% elif is_director %}
+        <p class="px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Markaz boshqaruvi</p>
+        <a href="{% url 'directors:dashboard' %}" class="nav-link {% if vn == 'directors:dashboard' %}active{% endif %}"><i data-lucide="layout-dashboard" class="h-[18px] w-[18px]"></i> Bosh sahifa</a>
+        <a href="{% url 'directors:teachers' %}" class="nav-link {% if 'directors:teachers' in vn %}active{% endif %}"><i data-lucide="users" class="h-[18px] w-[18px]"></i> O'qituvchilar</a>
+        <a href="{% url 'directors:groups' %}" class="nav-link {% if 'directors:groups' in vn %}active{% endif %}"><i data-lucide="school" class="h-[18px] w-[18px]"></i> Guruhlar</a>
+        <a href="{% url 'directors:students' %}" class="nav-link {% if 'directors:students' in vn %}active{% endif %}"><i data-lucide="user-round" class="h-[18px] w-[18px]"></i> O'quvchilar</a>
+        <a href="{% url 'directors:reviews' %}" class="nav-link {% if 'directors:reviews' in vn %}active{% endif %}"><i data-lucide="clipboard-check" class="h-[18px] w-[18px]"></i> Vazifa nazorati</a>
+        <a href="{% url 'directors:payments' %}" class="nav-link {% if 'directors:payments' in vn %}active{% endif %}"><i data-lucide="wallet" class="h-[18px] w-[18px]"></i> Oylik tushum</a>
+        <a href="{% url 'directors:announcements' %}" class="nav-link {% if 'directors:announcements' in vn %}active{% endif %}"><i data-lucide="bell" class="h-[18px] w-[18px]"></i> E'lon yuborish</a>
+      {% elif is_student %}
+        <p class="px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Mening sahifalarim</p>
+        <a href="{% url 'student:student_home' %}" class="nav-link {% if vn == 'student:student_home' %}active{% endif %}"><i data-lucide="layout-dashboard" class="h-[18px] w-[18px]"></i> Bosh sahifa</a>
+        <a href="{% url 'student:group' %}" class="nav-link {% if vn == 'student:group' %}active{% endif %}"><i data-lucide="school" class="h-[18px] w-[18px]"></i> Guruhim</a>
+        <a href="{% url 'student:homework_list' %}" class="nav-link {% if 'homework' in vn %}active{% endif %}"><i data-lucide="clipboard-list" class="h-[18px] w-[18px]"></i> Uy vazifalari</a>
+        <a href="{% url 'student:grades' %}" class="nav-link {% if vn == 'student:grades' %}active{% endif %}"><i data-lucide="star" class="h-[18px] w-[18px]"></i> Baholarim</a>
+        <a href="{% url 'student:materials' %}" class="nav-link {% if vn == 'student:materials' %}active{% endif %}"><i data-lucide="play-square" class="h-[18px] w-[18px]"></i> Materiallar</a>
+        <a href="{% url 'assessments:student_tests' %}" class="nav-link {% if vn == 'assessments:student_tests' %}active{% endif %}"><i data-lucide="file-check-2" class="h-[18px] w-[18px]"></i> Testlar</a>
+        <a href="{% url 'assessments:results' %}" class="nav-link {% if 'assessments' in vn %}active{% endif %}"><i data-lucide="file-check-2" class="h-[18px] w-[18px]"></i> Test natijalari</a>
+        <a href="{% url 'student:stats' %}" class="nav-link {% if vn == 'student:stats' %}active{% endif %}"><i data-lucide="bar-chart-3" class="h-[18px] w-[18px]"></i> Statistika</a>
+        <a href="{% url 'payments:student_payments' %}" class="nav-link {% if vn == 'payments:student_payments' %}active{% endif %}"><i data-lucide="wallet" class="h-[18px] w-[18px]"></i> To'lovlarim</a>
+      {% else %}
+        <p class="px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Administrator</p>
+        <a href="{% url 'staff:staff_dashboard' %}" class="nav-link {% if vn == 'staff:staff_dashboard' %}active{% endif %}"><i data-lucide="layout-dashboard" class="h-[18px] w-[18px]"></i> Bosh sahifa</a>
+        <a href="{% url 'staff:staff_directors' %}" class="nav-link {% if 'staff_director' in vn %}active{% endif %}"><i data-lucide="building-2" class="h-[18px] w-[18px]"></i> Direktorlar</a>
+        <a href="{% url 'staff:staff_teachers' %}" class="nav-link {% if 'staff_teacher' in vn %}active{% endif %}"><i data-lucide="users" class="h-[18px] w-[18px]"></i> O'qituvchilar</a>
+      {% endif %}
+
+      <p class="px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">Umumiy</p>
+      <a href="{% url 'chat:list' %}" class="nav-link {% if 'chat' in vn %}active{% endif %}">
+        <i data-lucide="message-circle" class="h-[18px] w-[18px]"></i> Chat
+        {% if chat_unread %}<span class="badge">{{ chat_unread }}</span>{% endif %}
+      </a>
+      <a href="{% url 'notifications:list' %}" class="nav-link {% if 'notifications' in vn %}active{% endif %}">
+        <i data-lucide="bell" class="h-[18px] w-[18px]"></i> Bildirishnomalar
+        {% if unread_notifications %}<span class="badge">{{ unread_notifications }}</span>{% endif %}
+      </a>
+      <a href="{% url 'accounts:settings' %}" class="nav-link {% if 'settings' in vn %}active{% endif %}"><i data-lucide="settings" class="h-[18px] w-[18px]"></i> Sozlamalar</a>
+      {% endwith %}
+    </nav>
+
+    <div class="border-t border-slate-200 p-3 dark:border-slate-800">
+      <div class="flex items-center gap-3 rounded-xl px-2 py-2">
+        {% if user.avatar %}
+          <img src="{% url 'core:file' 'avatar' user.id %}" alt="" class="h-9 w-9 rounded-full object-cover">
+        {% else %}
+          <span class="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">{{ user|initials }}</span>
+        {% endif %}
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{{ user.full_name }}</p>
+          <p class="truncate text-[11px] text-slate-400">{{ user.get_role_display }}</p>
+        </div>
+        <a href="{% url 'accounts:logout' %}" class="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10" title="Chiqish">
+          <i data-lucide="log-out" class="h-4 w-4"></i>
+        </a>
+      </div>
+    </div>
+  </aside>
+
+  <div id="sidebar-overlay" class="fixed inset-0 z-40 hidden bg-slate-900/40 backdrop-blur-sm lg:hidden"></div>
+
+  <!-- Main -->
+  <div class="flex min-w-0 flex-1 flex-col">
+    <header class="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-slate-200/80 bg-white/85 px-4 backdrop-blur-lg dark:border-slate-800 dark:bg-slate-900/85 sm:px-6">
+      <button id="sidebar-open" class="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden dark:hover:bg-slate-800" aria-label="Menyu">
+        <i data-lucide="menu" class="h-5 w-5"></i>
+      </button>
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-sm font-semibold text-slate-500 dark:text-slate-400">{% block topbar_title %}O'quv markazi{% endblock %}</p>
+      </div>
+      <button id="theme-toggle" data-url="{% url 'accounts:toggle_theme' %}" class="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100" title="Mavzuni almashtirish">
+        <i data-lucide="sun-moon" class="h-5 w-5"></i>
+      </button>
+      <a href="{% url 'notifications:list' %}" class="relative rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100" title="Bildirishnomalar">
+        <i data-lucide="bell" class="h-5 w-5"></i>
+        {% if unread_notifications %}
+          <span class="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">{{ unread_notifications }}</span>
+        {% endif %}
+      </a>
+      <a href="{% url 'accounts:settings' %}" class="flex items-center gap-2 rounded-xl p-1 pr-2 transition hover:bg-slate-100 dark:hover:bg-slate-800">
+        {% if user.avatar %}
+          <img src="{% url 'core:file' 'avatar' user.id %}" alt="" class="h-8 w-8 rounded-full object-cover">
+        {% else %}
+          <span class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-[11px] font-bold text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300">{{ user|initials }}</span>
+        {% endif %}
+        <span class="hidden text-sm font-medium text-slate-700 sm:block dark:text-slate-200">{{ user.first_name }}</span>
+      </a>
+    </header>
+
+    <main class="mx-auto w-full max-w-7xl flex-1 px-4 py-6 pb-28 sm:px-6 lg:pb-10">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+<!-- Mobil pastki menyu -->
+<nav class="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-lg lg:hidden dark:border-slate-800 dark:bg-slate-900/95">
+  <div class="mx-auto flex max-w-md items-center justify-around px-2 py-1.5">
+    {% with vn=request.resolver_match.view_name %}
+    {% if is_teacher %}
+      <a href="{% url 'academics:teacher_dashboard' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium {% if vn == 'academics:teacher_dashboard' %}text-indigo-600 dark:text-indigo-400{% else %}text-slate-400{% endif %}"><i data-lucide="layout-dashboard" class="h-5 w-5"></i>Bosh</a>
+      <a href="{% url 'academics:student_list' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium {% if 'student' in vn %}text-indigo-600 dark:text-indigo-400{% else %}text-slate-400{% endif %}"><i data-lucide="users" class="h-5 w-5"></i>O'quvchi</a>
+      <a href="{% url 'academics:homework_list' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium {% if 'homework' in vn %}text-indigo-600 dark:text-indigo-400{% else %}text-slate-400{% endif %}"><i data-lucide="clipboard-list" class="h-5 w-5"></i>Vazifa</a>
+      <a href="{% url 'payments:list' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium {% if 'payments' in vn %}text-indigo-600 dark:text-indigo-400{% else %}text-slate-400{% endif %}"><i data-lucide="wallet" class="h-5 w-5"></i>To'lov</a>
+    {% elif is_director %}
+      <a href="{% url 'directors:dashboard' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-[10px] font-medium {% if vn == 'directors:dashboard' %}text-indigo-600 dark:text-indigo-400{% else %}text-slate-400{% endif %}"><i data-lucide="layout-dashboard" class="h-5 w-5"></i>Bosh</a>
+      <a href="{% url 'directors:students' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-[10px] font-medium {% if 'directors:students' in vn %}text-indigo-600 dark:text-indigo-400{% else %}text-slate-400{% endif %}"><i data-lucide="users" class="h-5 w-5"></i>O'quvchi</a>
+      <a href="{% url 'directors:reviews' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-[10px] font-medium {% if 'directors:reviews' in vn %}text-indigo-600 dark:text-indigo-400{% else %}text-slate-400{% endif %}"><i data-lucide="clipboard-check" class="h-5 w-5"></i>Vazifa</a>
+      <a href="{% url 'directors:announcements' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 text-[10px] font-medium {% if 'directors:announcements' in vn %}text-indigo-600 dark:text-indigo-400{% else %}text-slate-400{% endif %}"><i data-lucide="bell" class="h-5 w-5"></i>E'lon</a>
+    {% elif is_student %}
+      <a href="{% url 'student:student_home' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium {% if vn == 'student:student_home' %}text-indigo-600 dark:text-indigo-400{% else %}text-slate-400{% endif %}"><i data-lucide="layout-dashboard" class="h-5 w-5"></i>Bosh</a>
+      <a href="{% url 'student:homework_list' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium {% if 'homework' in vn %}text-indigo-600 dark:text-indigo-400{% else %}text-slate-400{% endif %}"><i data-lucide="clipboard-list" class="h-5 w-5"></i>Vazifa</a>
+      <a href="{% url 'student:grades' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium {% if vn == 'student:grades' %}text-indigo-600 dark:text-indigo-400{% else %}text-slate-400{% endif %}"><i data-lucide="star" class="h-5 w-5"></i>Baho</a>
+      <a href="{% url 'chat:list' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium {% if 'chat' in vn %}text-indigo-600 dark:text-indigo-400{% else %}text-slate-400{% endif %}"><i data-lucide="message-circle" class="h-5 w-5"></i>Chat</a>
+    {% else %}
+      <a href="{% url 'staff:staff_dashboard' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium text-slate-400"><i data-lucide="layout-dashboard" class="h-5 w-5"></i>Bosh</a>
+      <a href="{% url 'staff:staff_directors' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium text-slate-400"><i data-lucide="building-2" class="h-5 w-5"></i>Direktor</a>
+      <a href="{% url 'staff:staff_teachers' %}" class="flex flex-col items-center gap-0.5 rounded-lg px-3 py-1.5 text-[10px] font-medium text-slate-400"><i data-lucide="users" class="h-5 w-5"></i>O'qituvchi</a>
+    {% endif %}
+    {% endwith %}
+  </div>
+</nav>
+
+{% else %}
+<main class="min-h-screen">
+  {% block auth_content %}{% endblock %}
+</main>
+{% endif %}
+
+<!-- Toast -->
+{% if messages %}
+<div class="fixed right-4 top-4 z-[60] flex w-[min(92vw,380px)] flex-col gap-2">
+  {% for message in messages %}
+    {% if message.tags == 'success' %}
+      {% with tone="border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200" icon="check-circle-2" %}
+        <div data-toast class="toast flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-soft {{ tone }}">
+          <i data-lucide="{{ icon }}" class="mt-0.5 h-4 w-4 shrink-0"></i>
+          <p class="flex-1">{{ message }}</p>
+          <button type="button" data-toast-close class="shrink-0 opacity-60 hover:opacity-100"><i data-lucide="x" class="h-3.5 w-3.5"></i></button>
+        </div>
+      {% endwith %}
+    {% elif message.tags == 'error' %}
+      {% with tone="border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200" icon="alert-circle" %}
+        <div data-toast class="toast flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-soft {{ tone }}">
+          <i data-lucide="{{ icon }}" class="mt-0.5 h-4 w-4 shrink-0"></i>
+          <p class="flex-1">{{ message }}</p>
+          <button type="button" data-toast-close class="shrink-0 opacity-60 hover:opacity-100"><i data-lucide="x" class="h-3.5 w-3.5"></i></button>
+        </div>
+      {% endwith %}
+    {% elif message.tags == 'warning' %}
+      {% with tone="border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200" icon="alert-triangle" %}
+        <div data-toast class="toast flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-soft {{ tone }}">
+          <i data-lucide="{{ icon }}" class="mt-0.5 h-4 w-4 shrink-0"></i>
+          <p class="flex-1">{{ message }}</p>
+          <button type="button" data-toast-close class="shrink-0 opacity-60 hover:opacity-100"><i data-lucide="x" class="h-3.5 w-3.5"></i></button>
+        </div>
+      {% endwith %}
+    {% else %}
+      {% with tone="border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200" icon="info" %}
+        <div data-toast class="toast flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-soft {{ tone }}">
+          <i data-lucide="{{ icon }}" class="mt-0.5 h-4 w-4 shrink-0"></i>
+          <p class="flex-1">{{ message }}</p>
+          <button type="button" data-toast-close class="shrink-0 opacity-60 hover:opacity-100"><i data-lucide="x" class="h-3.5 w-3.5"></i></button>
+        </div>
+      {% endwith %}
+    {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+<script src="https://unpkg.com/lucide@0.462.0/dist/umd/lucide.min.js"></script>
+<script>window.lucide && window.lucide.createIcons();</script>
+<script src="{% static 'js/app.js' %}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
