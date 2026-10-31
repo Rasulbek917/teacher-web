@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
@@ -122,6 +123,7 @@ private fun TeacherWebNativeApp() {
     var user by remember { mutableStateOf<JSONObject?>(null) }
     var sections by remember { mutableStateOf<List<String>>(emptyList()) }
     var active by remember { mutableStateOf("dashboard") }
+    var lastContentSection by remember { mutableStateOf("dashboard") }
     var payload by remember { mutableStateOf(JSONObject()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
@@ -211,6 +213,10 @@ private fun TeacherWebNativeApp() {
         if (token != null && active != "more") refresh(active)
     }
 
+    LaunchedEffect(active) {
+        if (active != "more") lastContentSection = active
+    }
+
     MaterialTheme(
         colorScheme = lightColorScheme(primary = Brand, background = Canvas, surface = Color.White, onBackground = Ink, onSurface = Ink)
     ) {
@@ -289,24 +295,25 @@ private fun TeacherWebNativeApp() {
                     if (loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Brand)
                     if (error.isNotBlank()) MessageBanner(error, true) { error = "" }
                     if (success.isNotBlank()) MessageBanner(success, false) { success = "" }
-                    if (active == "more") {
-                        MoreSections(sections, active) { active = it; selectedConversation = null; selectedGroup = null }
+                    Crossfade(targetState = active, modifier = Modifier.weight(1f), label = "section-transition") { shownSection ->
+                    if (shownSection == "more") {
+                        MoreSections(sections, lastContentSection) { active = it; selectedConversation = null; selectedGroup = null }
                     } else if (testAttempt != null) {
                         TestAttemptScreen(testAttempt!!, onSubmit = { answers ->
                             val body = JSONObject().put("attempt_id", testAttempt!!.optInt("attempt_id")).put("answers", answers)
                             doAction("submit_test", body, "Test topshirildi.")
                             testAttempt = null
                         }, onClose = { testAttempt = null })
-                    } else if (active == "dashboard") {
+                    } else if (shownSection == "dashboard") {
                         DashboardScreen(user!!, payload, sections) { active = it }
-                    } else if (active == "attendance" && selectedGroup == null && user!!.optString("role") != "STUDENT") {
+                    } else if (shownSection == "attendance" && selectedGroup == null && user!!.optString("role") != "STUDENT") {
                         GroupPicker(payload.optJSONArray("groups") ?: JSONArray(), onChoose = { selectedGroup = it }, onAddGroup = { dialog = "create_group" })
-                    } else if (active == "chats" && selectedConversation != null) {
+                    } else if (shownSection == "chats" && selectedConversation != null) {
                         ChatScreen(payload.optJSONObject("conversation"), payload.optJSONArray("messages") ?: JSONArray(),
                             onBack = { selectedConversation = null }, onSend = { text ->
                                 doAction("send_message", JSONObject().put("conversation_id", selectedConversation).put("text", text))
                             })
-                    } else if (active == "assistant" && selectedConversation != null) {
+                    } else if (shownSection == "assistant" && selectedConversation != null) {
                         AiChatScreen(payload.optJSONObject("conversation"), payload.optJSONArray("messages") ?: JSONArray(),
                             onBack = { selectedConversation = null },
                             onSend = { text -> doAction("send_ai_message", JSONObject().put("conversation_id", selectedConversation).put("text", text)) },
@@ -314,12 +321,12 @@ private fun TeacherWebNativeApp() {
                             onCancel = { doAction("cancel_ai_action", JSONObject().put("conversation_id", selectedConversation)) })
                     } else {
                         SectionScreen(
-                            name = active,
+                            name = shownSection,
                             payload = payload,
                             role = user!!.optString("role"),
                             onItem = { item ->
                                 selectedRow = item
-                                when (active) {
+                                when (shownSection) {
                                     "chats" -> { selectedConversation = item.optLong("id"); refresh("chats") }
                                     "assistant" -> { selectedConversation = item.optLong("id"); refresh("assistant") }
                                     "notifications" -> doAction("read_notification", JSONObject().put("id", item.optInt("id")))
@@ -347,6 +354,7 @@ private fun TeacherWebNativeApp() {
                                 payload = JSONObject(payload.toString())
                             }
                         )
+                    }
                     }
                 }
             }
