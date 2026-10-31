@@ -9,6 +9,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -88,6 +94,7 @@ private data class AppSection(val id: String, val title: String, val icon: Image
 
 private val sectionCatalog = listOf(
     AppSection("dashboard", "Bosh sahifa", Icons.Filled.Dashboard),
+    AppSection("more", "Bo‘limlar", Icons.Filled.Apps),
     AppSection("groups", "Guruhlar", Icons.Filled.Groups),
     AppSection("teachers", "O‘qituvchilar", Icons.Filled.School),
     AppSection("students", "O‘quvchilar", Icons.Filled.People),
@@ -124,6 +131,7 @@ private fun TeacherWebNativeApp() {
     var selectedConversation by remember { mutableStateOf<Long?>(null) }
     var selectedGroup by remember { mutableStateOf<Long?>(null) }
     var testAttempt by remember { mutableStateOf<JSONObject?>(null) }
+    var bootstrapRetry by remember { mutableIntStateOf(0) }
 
     fun refresh(section: String = active) {
         val auth = token ?: return
@@ -181,7 +189,7 @@ private fun TeacherWebNativeApp() {
         }
     }
 
-    LaunchedEffect(token) {
+    LaunchedEffect(token, bootstrapRetry) {
         val auth = token ?: return@LaunchedEffect
         loading = true
         try {
@@ -191,9 +199,8 @@ private fun TeacherWebNativeApp() {
             val roleSections = data.optJSONArray("sections") ?: JSONArray()
             sections = (0 until roleSections.length()).mapNotNull { roleSections.optString(it).takeIf(String::isNotBlank) }
             if (active !in sections) active = "dashboard"
-        } catch (_: Exception) {
-            preferences.edit().remove("token").apply()
-            token = null
+        } catch (e: Exception) {
+            error = e.message ?: "Hisobni yuklab bo‘lmadi. Internetni tekshirib qayta urinib ko‘ring."
             user = null
         } finally {
             loading = false
@@ -210,8 +217,16 @@ private fun TeacherWebNativeApp() {
         if (token != null && user == null) {
             Box(Modifier.fillMaxSize().background(Canvas), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = Brand)
-                    Spacer(Modifier.height(12.dp)); Text("Hisob yuklanmoqda…", color = Muted)
+                    if (loading) {
+                        CircularProgressIndicator(color = Brand)
+                        Spacer(Modifier.height(12.dp)); Text("Hisob yuklanmoqda…", color = Muted)
+                    } else {
+                        Text("Hisobni ochib bo‘lmadi", color = Ink, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp)); Text(error.ifBlank { "Internet aloqasini tekshiring." }, color = Muted)
+                        Spacer(Modifier.height(16.dp))
+                        Button(onClick = { error = ""; bootstrapRetry++ }) { Text("Qayta urinish") }
+                        TextButton(onClick = { preferences.edit().remove("token").apply(); token = null; user = null; error = "" }) { Text("Boshqa hisob bilan kirish") }
+                    }
                 }
             }
         } else if (token == null) {
@@ -250,7 +265,10 @@ private fun TeacherWebNativeApp() {
                             NavigationBarItem(
                                 selected = selected,
                                 onClick = { if (id == "more") active = "more" else { active = id; selectedConversation = null; selectedGroup = null } },
-                                icon = { Icon(item.icon, contentDescription = item.title, tint = if (selected) Brand else Muted) },
+                                icon = {
+                                    val iconColor by animateColorAsState(if (selected) Brand else Muted, label = "navigation-icon")
+                                    Icon(item.icon, contentDescription = item.title, tint = iconColor, modifier = Modifier.animateContentSize())
+                                },
                                 label = { Text(if (id == "more") "Bo‘limlar" else item.title, fontSize = 11.sp) },
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = Brand,
@@ -290,7 +308,10 @@ private fun TeacherWebNativeApp() {
                             })
                     } else if (active == "assistant" && selectedConversation != null) {
                         AiChatScreen(payload.optJSONObject("conversation"), payload.optJSONArray("messages") ?: JSONArray(),
-                            onBack = { selectedConversation = null }, onSend = { text -> doAction("send_ai_message", JSONObject().put("conversation_id", selectedConversation).put("text", text)) })
+                            onBack = { selectedConversation = null },
+                            onSend = { text -> doAction("send_ai_message", JSONObject().put("conversation_id", selectedConversation).put("text", text)) },
+                            onConfirm = { doAction("confirm_ai_action", JSONObject().put("conversation_id", selectedConversation)) },
+                            onCancel = { doAction("cancel_ai_action", JSONObject().put("conversation_id", selectedConversation)) })
                     } else {
                         SectionScreen(
                             name = active,
@@ -311,6 +332,11 @@ private fun TeacherWebNativeApp() {
                                 }
                             },
                             onAdd = { kind -> dialog = kind },
+                            onManageItem = { actionName, item ->
+                                selectedRow = item
+                                if (actionName == "rename_ai_chat" || actionName == "delete_ai_chat") dialog = actionName
+                                else doAction(actionName, JSONObject().put("conversation_id", item.optLong("id")))
+                            },
                             onGroupSelect = { selectedGroup = it },
                             onAttendanceToggle = { studentId ->
                                 val marks = payload.optJSONArray("items") ?: JSONArray()
@@ -329,6 +355,11 @@ private fun TeacherWebNativeApp() {
                     AlertDialog(onDismissRequest = { dialog = null }, title = { Text("Tekshirish uchun ishlar") },
                         text = { Text("Baholar bo‘limidan o‘quvchi topshirig‘ini tanlang.") }, confirmButton = { TextButton(onClick = { dialog = null; active = "grades" }) { Text("Baholarni ochish") } },
                         dismissButton = { TextButton(onClick = { dialog = null }) { Text("Yopish") } })
+                } else if (dialog == "delete_ai_chat") {
+                    AlertDialog(onDismissRequest = { dialog = null }, title = { Text("AI chatni o‘chirish") },
+                        text = { Text("‘${selectedRow.optString("title")}’ suhbatini o‘chirilsinmi?") },
+                        confirmButton = { Button(onClick = { doAction("delete_ai_chat", JSONObject().put("conversation_id", selectedRow.optLong("id"))); dialog = null }) { Text("O‘chirish") } },
+                        dismissButton = { TextButton(onClick = { dialog = null }) { Text("Bekor qilish") } })
                 } else {
                     ActionDialog(dialog!!, selectedRow, payload, user!!.optString("role"), onClose = { dialog = null }, onSubmit = { actionName, values ->
                         if (actionName == "mark_attendance") {
@@ -358,7 +389,8 @@ private fun LoginScreen(loading: Boolean, error: String, onLogin: (String, Strin
         Spacer(Modifier.height(8.dp))
         Text("O‘quv markazingizni bir joydan boshqaring", color = Muted, fontSize = 15.sp)
         Spacer(Modifier.height(28.dp))
-        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+        AnimatedVisibility(visible = true, enter = fadeIn() + slideInVertically(initialOffsetY = { it / 8 })) {
+        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.animateContentSize()) {
             Column(Modifier.fillMaxWidth().padding(22.dp)) {
                 Text("Hisobingizga kiring", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Ink)
                 Spacer(Modifier.height(18.dp))
@@ -371,6 +403,7 @@ private fun LoginScreen(loading: Boolean, error: String, onLogin: (String, Strin
                     if (loading) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp) else Text("Kirish", fontWeight = FontWeight.Bold)
                 }
             }
+        }
         }
         Spacer(Modifier.height(18.dp))
         Text("O‘qituvchi, o‘quvchi va rahbarlar uchun mobil ilova", color = Muted, fontSize = 12.sp)
@@ -464,7 +497,7 @@ private fun SectionTile(id: String, selected: Boolean, modifier: Modifier = Modi
 }
 
 @Composable
-private fun SectionScreen(name: String, payload: JSONObject, role: String, onItem: (JSONObject) -> Unit, onAdd: (String) -> Unit, onGroupSelect: (Long) -> Unit, onAttendanceToggle: (Long) -> Unit) {
+private fun SectionScreen(name: String, payload: JSONObject, role: String, onItem: (JSONObject) -> Unit, onAdd: (String) -> Unit, onGroupSelect: (Long) -> Unit, onAttendanceToggle: (Long) -> Unit, onManageItem: (String, JSONObject) -> Unit) {
     val itemsArray = payload.optJSONArray("items") ?: JSONArray()
     val title = payload.optString("title", sectionCatalog.firstOrNull { it.id == name }?.title ?: "Bo‘lim")
     Column(Modifier.fillMaxSize()) {
@@ -517,7 +550,34 @@ private fun SectionScreen(name: String, payload: JSONObject, role: String, onIte
                             Checkbox(checked = row.optBoolean("present"), onCheckedChange = { onAttendanceToggle(row.optLong("id")) }, colors = CheckboxDefaults.colors(checkedColor = Brand))
                             Column(Modifier.weight(1f)) { Text(row.optString("title"), color = Ink, fontWeight = FontWeight.SemiBold); Text(if (row.optBoolean("present")) "Keldi" else "Kelmagan", color = Muted, fontSize = 12.sp) }
                         }
-                    } else DataCard(name, row) { onItem(row) }
+                    } else if (name == "assistant") AssistantChatCard(row, onOpen = { onItem(row) }, onManage = { action -> onManageItem(action, row) })
+                    else DataCard(name, row) { onItem(row) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AssistantChatCard(row: JSONObject, onOpen: () -> Unit, onManage: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth().clickable(onClick = onOpen), colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(17.dp)) {
+        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(40.dp).background(Brand.copy(alpha = .1f), CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.AutoAwesome, null, tint = Brand)
+            }
+            Spacer(Modifier.width(11.dp))
+            Column(Modifier.weight(1f)) {
+                Text(row.optString("title"), color = Ink, fontWeight = FontWeight.SemiBold)
+                Text(row.optString("subtitle"), color = Muted, fontSize = 12.sp)
+            }
+            if (row.optBoolean("pinned")) Icon(Icons.Filled.PushPin, "Qadalgan", tint = Brand, modifier = Modifier.size(18.dp))
+            Box {
+                IconButton(onClick = { expanded = true }) { Icon(Icons.Filled.MoreVert, "Chat sozlamalari", tint = Muted) }
+                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    DropdownMenuItem(text = { Text(if (row.optBoolean("pinned")) "Qadog‘dan olish" else "Qadash") }, leadingIcon = { Icon(Icons.Filled.PushPin, null) }, onClick = { expanded = false; onManage("pin_ai_chat") })
+                    DropdownMenuItem(text = { Text("Nomini o‘zgartirish") }, leadingIcon = { Icon(Icons.Filled.Edit, null) }, onClick = { expanded = false; onManage("rename_ai_chat") })
+                    DropdownMenuItem(text = { Text("O‘chirish", color = Color(0xFFB42318)) }, leadingIcon = { Icon(Icons.Filled.Delete, null, tint = Color(0xFFB42318)) }, onClick = { expanded = false; onManage("delete_ai_chat") })
                 }
             }
         }
@@ -615,6 +675,7 @@ private fun ActionDialog(action: String, row: JSONObject, payload: JSONObject, r
         "create_ai_test" -> listOf("subject" to "Fan", "topic" to "Mavzu", "grade_level" to "Sinf/daraja", "count" to "Savollar soni", "difficulty" to "Qiyinlik (EASY/MEDIUM/HARD/MIXED)", "group_id" to "Guruh ID")
         "publish_test", "create_ai_chat", "start_chat", "mark_attendance" -> emptyList()
         "send_announcement" -> listOf("title" to "Sarlavha", "body" to "E’lon matni")
+        "rename_ai_chat" -> listOf("title" to "Chat nomi")
         "update_profile" -> listOf("first_name" to "Ism", "last_name" to "Familiya", "phone" to "Telefon", "current_password" to "Joriy parol", "new_password" to "Yangi parol")
         "send_message", "send_ai_message" -> listOf("text" to "Xabaringiz")
         else -> emptyList()
@@ -627,6 +688,7 @@ private fun ActionDialog(action: String, row: JSONObject, payload: JSONObject, r
             "create_ai_test" -> { put("count", "10"); put("subject", "Matematika"); put("difficulty", "MIXED") }
             "create_group" -> { put("time", "09:00"); put("price", "300000") }
             "create_material" -> put("type", "VIDEO")
+            "rename_ai_chat" -> { put("title", row.optString("title")); put("conversation_id", row.optString("id")) }
             "update_profile" -> payload.optJSONObject("user")?.let { profile ->
                 put("first_name", profile.optString("first_name")); put("last_name", profile.optString("last_name")); put("phone", profile.optString("phone"))
             }
@@ -647,6 +709,7 @@ private fun ActionDialog(action: String, row: JSONObject, payload: JSONObject, r
         "create_ai_chat" -> "AI chat ochish"
         "start_chat" -> "Shaxsiy suhbat boshlash"
         "send_announcement" -> "Bildirishnoma yuborish"
+        "rename_ai_chat" -> "AI chat nomini o‘zgartirish"
         "update_profile" -> "Profil sozlamalari"
         "send_message" -> "Xabar yuborish"
         "send_ai_message" -> "AI’ga yozish"
@@ -764,6 +827,7 @@ private fun ActionDialog(action: String, row: JSONObject, payload: JSONObject, r
             if (action == "review_submission") values["submission_id"] = row.optString("id")
             if (action == "submit_homework") values["homework_id"] = row.optString("id")
             if (action == "mark_paid") { values["student_id"] = row.optString("student_id"); values["group_id"] = row.optString("group_id") }
+            if (action == "rename_ai_chat") values["conversation_id"] = row.optString("id")
             val json = JSONObject(); values.forEach { (key, value) ->
                 if (key !in listOf("submission_id", "homework_id", "student_id", "group_id") || value.isNotBlank()) json.put(key, value.toIntOrNull() ?: value)
             }
@@ -801,7 +865,7 @@ private fun ChatScreen(conversation: JSONObject?, messages: JSONArray, onBack: (
 }
 
 @Composable
-private fun AiChatScreen(conversation: JSONObject?, messages: JSONArray, onBack: () -> Unit, onSend: (String) -> Unit) {
+private fun AiChatScreen(conversation: JSONObject?, messages: JSONArray, onBack: () -> Unit, onSend: (String) -> Unit, onConfirm: () -> Unit, onCancel: () -> Unit) {
     var text by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         TextButton(onClick = onBack) { Text("‹ AI chatlar") }
@@ -812,6 +876,12 @@ private fun AiChatScreen(conversation: JSONObject?, messages: JSONArray, onBack:
                 Card(colors = CardDefaults.cardColors(containerColor = if (message.optString("role") == "USER") Brand.copy(alpha = .1f) else Color.White)) {
                     Column(Modifier.padding(12.dp)) { Text(if (message.optString("role") == "USER") "Siz" else "AI yordamchi", color = Muted, fontSize = 11.sp); Text(message.optString("content"), color = Ink) }
                 }
+            }
+        }
+        if (conversation?.optBoolean("pending") == true) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onCancel, Modifier.weight(1f)) { Text("Bekor qilish") }
+                Button(onClick = onConfirm, Modifier.weight(1f)) { Text("Tasdiqlash") }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {

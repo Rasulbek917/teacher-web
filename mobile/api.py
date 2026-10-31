@@ -332,7 +332,7 @@ def section(request, name):
             return _error("Suhbat topilmadi.", 404)
         from chat.services import mark_read
         mark_read(conv, user)
-        data["conversation"] = {"id": conv.pk, "title": conv.title}
+        data["conversation"] = {"id": conv.pk, "title": conv.title, "pending": bool(conv.pending_action)}
         data["messages"] = [{"id": m.pk, "sender": m.sender.full_name, "mine": m.sender_id == user.pk,
                               "text": m.text, "created": m.created_at.isoformat()} for m in
                              conv.messages.select_related("sender").order_by("id")[-200:]]
@@ -588,18 +588,71 @@ def action(request):
                 return _error("Chat yoki xabar noto‘g‘ri.")
             AiChatMessage.objects.create(conversation=chat, role="USER", content=text)
             from assessments.services import AiUnavailable, chat_with_teacher
-            from assessments.views import _greeting_reply, _teacher_ai_context
-            context, _ = _teacher_ai_context(user, chat.selected_student)
+            from assessments.views import _greeting_reply, _teacher_ai_context, _try_grade_action, _try_homework_action
+            from types import SimpleNamespace
+            fake_request = SimpleNamespace(user=user, session={})
+            context, students = _teacher_ai_context(user, chat.selected_student)
             recent = list(chat.messages.order_by("created_at", "id"))[-40:]
             history = [("user" if m.role == "USER" else "assistant", m.content) for m in recent]
             try:
-                answer = _greeting_reply(text) or chat_with_teacher(history=history, site_context=context)
+                answer = _greeting_reply(text)
+                if answer is None:
+                    answer = _try_homework_action(fake_request, text)
+                if answer is None:
+                    answer = _try_grade_action(fake_request, text, students, chat.selected_student)
+                if fake_request.session.get("ai_pending_action"):
+                    chat.pending_action = fake_request.session["ai_pending_action"]
+                    pending = chat.pending_action
+                    if pending.get("type") == "HOMEWORK":
+                        answer = f"'{pending.get('title', 'Uy vazifasi')}' vazifasini {next((g.name for g in _groups(user) if g.pk == pending.get('group_id')), 'guruh')} guruhiga beraymi? Tasdiqlash tugmasini bosing."
+                    else:
+                        submission = Submission.objects.select_related("student", "homework").filter(pk=pending.get("submission_id")).first()
+                        answer = f"{submission.student.full_name}ga '{submission.homework.title}' bo‘yicha {pending.get('grade')}/100 baho qo‘yaymi? Tasdiqlash tugmasini bosing." if submission else "Topshiriq topilmadi."
+                if answer is None:
+                    answer = chat_with_teacher(history=history, site_context=context)
             except AiUnavailable as exc:
                 answer = str(exc)
             AiChatMessage.objects.create(conversation=chat, role="ASSISTANT", content=answer[:8000])
             chat.title = text[:96] if chat.title == "Yangi chat" else chat.title
-            chat.save(update_fields=["updated_at", "title"])
-            return _ok({"reply": answer})
+            chat.save(update_fields=["updated_at", "title", "pending_action"])
+            return _ok({"reply": answer, "pending": bool(chat.pending_action)})
+        if action_name in {"confirm_ai_action", "cancel_ai_action"} and user.role in {User.Roles.TEACHER, User.Roles.SUPER_ADMIN}:
+            chat = AiConversation.objects.filter(owner=user, pk=data.get("conversation_id")).first()
+            if not chat:
+                return _error("AI chat topilmadi.", 404)
+            pending = chat.pending_action or {}
+            if action_name == "cancel_ai_action":
+                answer = "Amal bekor qilindi. Hech narsa o‘zgartirilmadi." if pending else "Tasdiqlashni kutayotgan amal yo‘q."
+            elif pending.get("type") == "HOMEWORK":
+                group = _groups(user).filter(pk=pending.get("group_id")).first()
+                title = str(pending.get("title", "")).strip()[:160]
+                description = str(pending.get("description", ""))[:4000]
+                if not group or not title:
+                    return _error("Guruh yoki vazifa ma’lumoti noto‘g‘ri.")
+                homework = Homework.objects.create(group=group, title=title, description=description)
+                for membership in group.memberships.select_related("student"):
+                    notify(membership.student, type=Notification.Type.SYSTEM, title="Yangi uy vazifasi", body=homework.title, link=f"/student/homework/{homework.pk}/")
+                answer = f"'{homework.title}' vazifasi {group.name} guruhiga yuborildi."
+            elif pending.get("type") == "GRADE":
+                submission = Submission.objects.select_related("homework__group", "student").filter(pk=pending.get("submission_id"), homework__group__in=_groups(user)).first()
+                try:
+                    grade = int(pending.get("grade"))
+                except (TypeError, ValueError):
+                    grade = -1
+                if not submission or not 0 <= grade <= 100:
+                    return _error("Topshiriq topilmadi yoki baho noto‘g‘ri.")
+                submission.grade = grade
+                submission.result = Submission.Result.DONE if grade >= 60 else Submission.Result.WRONG
+                submission.reviewed_at = timezone.now()
+                submission.save()
+                notify(submission.student, type=Notification.Type.HOMEWORK_REVIEWED, title="Uy vazifangiz tekshirildi", body=f"{submission.homework.title}: {grade}/100 baho.", link="/student/homework/")
+                answer = f"{submission.student.full_name}ga {submission.homework.title} bo‘yicha {grade}/100 baho qo‘yildi."
+            else:
+                return _error("Tasdiqlashni kutayotgan amal yo‘q.")
+            chat.pending_action = {}
+            chat.save(update_fields=["pending_action", "updated_at"])
+            AiChatMessage.objects.create(conversation=chat, role="ASSISTANT", content=answer)
+            return _ok({"reply": answer, "pending": False})
         if action_name == "create_ai_test" and user.role in {User.Roles.TEACHER, User.Roles.SUPER_ADMIN}:
             group = _groups(user).filter(pk=data.get("group_id")).first() if data.get("group_id") else None
             from assessments.services import AiUnavailable, generate_questions

@@ -139,6 +139,7 @@ class AiConversation(models.Model):
     selected_student = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="ai_student_conversations")
     title = models.CharField(max_length=100, default="Yangi chat")
     is_pinned = models.BooleanField(default=False)
+    pending_action = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
