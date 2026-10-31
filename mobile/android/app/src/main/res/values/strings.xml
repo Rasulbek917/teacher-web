@@ -1,5 +1,4 @@
 <resources>
-    <!-- Replace this with the deployed HTTPS address of the TeacherWeb site. -->
-    <string name="site_url">https://YOUR-TEACHERWEB-DOMAIN</string>
+    <string name="site_url">https://teacher.aminboyevrasulbek.uz</string>
     <string name="app_name">TeacherWeb</string>
 </resources>
