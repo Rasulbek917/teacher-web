@@ -1,4 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "django"
+  "framework": "django",
+  "installCommand": "pip install -r requirements.txt",
+  "buildCommand": "python vercel_build.py"
 }
