@@ -319,6 +319,8 @@ def telegram_setup(request):
     if not isinstance(payload, dict):
         return JsonResponse({"ok": False, "error": "JSON obyekt bo'lishi kerak."}, status=400)
     token = str(payload.get("token", "")).strip()
+    if not token and payload.get("use_env"):
+        token = telegram_bot_token()
     if not token:
         return JsonResponse({"ok": False, "error": "token kiritilmagan."}, status=400)
     if not _telegram_setup_allowed(request, token):

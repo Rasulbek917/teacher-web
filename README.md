@@ -89,6 +89,8 @@ Botni production'da bir marta faollashtirish kifoya: `POST /telegram/setup/` end
 curl -X POST https://<domen>/telegram/setup/ \
   -H "Content-Type: application/json" \
   -d '{"token": "<BotFather tokeni>"}'
+curl -X POST https://<domen>/telegram/setup/ \
+  -H "Content-Type: application/json" -d '{"use_env": true}'   # serverdagi TELEGRAM_BOT_TOKEN bilan
 curl https://<domen>/telegram/setup/   # holat va webhook ma'lumoti
 ```
 
