@@ -27,7 +27,7 @@ def download_android(request):
     return FileResponse(
         apk_path.open("rb"),
         as_attachment=True,
-        filename="TeacherWeb-1.0.2.apk",
+        filename="TeacherWeb-1.0.3.apk",
     )
 
 

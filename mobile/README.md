@@ -1,6 +1,6 @@
 # TeacherWeb Android ilovasi
 
-Bu loyiha saytni WebView ichida ko‘rsatmaydi. Android interfeysi Kotlin va Jetpack Compose’da yozilgan; login, rolga mos menyu, dashboard, guruhlar, o‘quvchilar, uy vazifalari, davomat, baholar, to‘lovlar, chat, bildirishnomalar, testlar va AI chat serverdagi Django API orqali ishlaydi.
+Bu loyiha saytni WebView ichida ko‘rsatmaydi. Android interfeysi Kotlin va Jetpack Compose’da yozilgan; login, rolga mos menyu, dashboard, guruhlar, o‘quvchilar, uy vazifalari, davomat, baholar, to‘lovlar, chat, bildirishnomalar, testlar va AI chat serverdagi Django API orqali ishlaydi. Sozlamalarda profil rasmini (avatar) yuklash va Telegram botga ulanish ham mavjud.
 
 ## Build
 

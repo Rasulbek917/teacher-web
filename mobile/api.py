@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 from datetime import date, timedelta
 from functools import wraps
 
@@ -10,7 +11,7 @@ from django.contrib.auth import authenticate
 from django.core import signing
 from django.db import transaction
 from django.db.models import Avg, Count, Q, Sum
-from django.http import JsonResponse
+from django.http import FileResponse, Http404, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -47,7 +48,12 @@ def _error(message, status=400):
     return JsonResponse({"ok": False, "error": str(message)}, status=status)
 
 
-def _user_payload(user):
+def _user_payload(user, request=None):
+    avatar_url = ""
+    if user.avatar:
+        avatar_url = "/api/mobile/avatar/"
+    elif user.external_avatar_url:
+        avatar_url = user.external_avatar_url
     return {
         "id": user.pk,
         "login": user.login,
@@ -58,7 +64,31 @@ def _user_payload(user):
         "phone": user.phone,
         "language": user.language,
         "theme": user.theme,
+        "avatar_url": avatar_url,
     }
+
+
+def _telegram_profile(user):
+    if user.role == User.Roles.TEACHER:
+        return TeacherProfile.objects.filter(user=user).first()
+    if user.role == User.Roles.STUDENT:
+        return StudentProfile.objects.filter(user=user).first()
+    return None
+
+
+def _telegram_payload(user):
+    from integrations.services import bot_link
+
+    profile = _telegram_profile(user)
+    if profile is None:
+        return {"available": False, "linked": False, "url": "",
+                "message": "Telegram ulanishi o‘qituvchi yoki o‘quvchi akkaunti uchun mavjud."}
+    if not bot_link():
+        return {"available": False, "linked": bool(profile.telegram_linked_at), "url": "",
+                "message": "Bot sozlanmagan. Administrator TELEGRAM_BOT_USERNAME ni sozlashi kerak."}
+    linked = bool(profile.telegram_linked_at)
+    url = bot_link() if linked else (bot_link(profile.telegram_link_token) if profile.telegram_link_token else "")
+    return {"available": True, "linked": linked, "url": url or bot_link()}
 
 
 def _current_user(request):
@@ -113,13 +143,52 @@ def login(request):
         return _error("Login yoki parol noto‘g‘ri.", 401)
     attempt.delete()
     token = signing.dumps({"id": user.pk, "v": user.token_version}, salt=TOKEN_SALT)
-    return _ok({"token": token, "user": _user_payload(user)})
+    return _ok({"token": token, "user": _user_payload(user, request)})
 
 
 @require_http_methods(["POST"])
 @_authenticated
 def logout(request):
     return _ok({"message": "Chiqildi."})
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+@_authenticated
+def avatar(request):
+    user = request.mobile_user
+    if request.method == "GET":
+        if not user.avatar:
+            raise Http404
+        response = FileResponse(user.avatar.open("rb"))
+        response["Cache-Control"] = "no-store"
+        return response
+
+    upload = request.FILES.get("avatar")
+    if upload is None:
+        return _error("Rasm tanlanmadi.")
+    if upload.size > 5 * 1024 * 1024:
+        return _error("Rasm hajmi 5 MB dan oshmasin.")
+    from PIL import Image, UnidentifiedImageError
+
+    try:
+        probe = Image.open(upload)
+        probe.verify()
+        image_format = (probe.format or "").upper()
+    except (UnidentifiedImageError, OSError):
+        return _error("Fayl rasm emas. JPG, PNG yoki WEBP yuklang.")
+    extensions = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp"}
+    if image_format not in extensions:
+        return _error("Faqat JPG, PNG yoki WEBP rasm yuklang.")
+    upload.seek(0)
+    old_name = user.avatar.name if user.avatar else ""
+    old_storage = user.avatar.storage if user.avatar else None
+    user.avatar.save(f"user-{user.pk}-{int(timezone.now().timestamp())}{extensions[image_format]}", upload, save=False)
+    user.external_avatar_url = ""
+    user.save(update_fields=["avatar", "external_avatar_url"])
+    if old_name and old_storage:
+        old_storage.delete(old_name)
+    return _ok({"message": "Profil rasmi yangilandi.", "user": _user_payload(user, request)})
 
 
 def _groups(user):
@@ -195,12 +264,12 @@ def _sections(role):
 @_authenticated
 def bootstrap(request):
     user = request.mobile_user
-    return _ok({"user": _user_payload(user), "sections": _sections(user.role),
+    return _ok({"user": _user_payload(user, request), "sections": _sections(user.role),
                 "dashboard": _dashboard(user),
                 "unread_notifications": user.notifications.filter(is_read=False).count()})
 
 
-def _section_payload(user, name):
+def _section_payload(user, name, request=None):
     today = timezone.localdate()
     if name == "dashboard":
         return {"metrics": _dashboard(user), "groups": _groups_payload(user)[:6]}
@@ -315,7 +384,7 @@ def _section_payload(user, name):
         return {"items": [], "title": "E’lonlar", "groups": _groups_payload(user),
                 "teachers": [{"id": t.pk, "title": t.full_name} for t in teachers]}
     if name == "settings":
-        return {"user": _user_payload(user), "title": "Sozlamalar"}
+        return {"user": _user_payload(user, request), "telegram": _telegram_payload(user), "title": "Sozlamalar"}
     return {"items": [], "title": name}
 
 
@@ -324,7 +393,7 @@ def _section_payload(user, name):
 def section(request, name):
     if name not in _sections(request.mobile_user.role):
         return _error("Bu bo‘limga ruxsat yo‘q.", 403)
-    data = _section_payload(request.mobile_user, name)
+    data = _section_payload(request.mobile_user, name, request)
     user = request.mobile_user
     if name == "chats" and request.GET.get("conversation"):
         conv = user_conversations(user).filter(pk=request.GET.get("conversation")).first()
@@ -541,7 +610,21 @@ def action(request):
                 user.set_password(new_password)
                 user.token_version += 1
             user.save()
-            return _ok({"message": "Profil saqlandi. Parol o‘zgargan bo‘lsa, qayta kiring.", "relogin": bool(new_password)})
+            return _ok({"message": "Profil saqlandi. Parol o‘zgargan bo‘lsa, qayta kiring.", "relogin": bool(new_password),
+                        "user": _user_payload(user, request)})
+        if action_name == "telegram_link":
+            profile = _telegram_profile(user)
+            if profile is None:
+                return _error("Telegram ulanishi o‘qituvchi yoki o‘quvchi akkaunti uchun mavjud.")
+            from integrations.services import bot_link
+            if not bot_link():
+                return _error("Bot sozlanmagan. Administrator TELEGRAM_BOT_USERNAME ni sozlashi kerak.")
+            if not profile.telegram_linked_at and not profile.telegram_link_token:
+                profile.telegram_link_token = secrets.token_urlsafe(18)
+                profile.save(update_fields=["telegram_link_token"])
+            url = bot_link() if profile.telegram_linked_at else bot_link(profile.telegram_link_token)
+            message = "Telegram botga ulangan." if profile.telegram_linked_at else "Telegram botda Start tugmasini bosing."
+            return _ok({"url": url, "linked": bool(profile.telegram_linked_at), "message": message})
         if action_name == "send_message":
             conv = user_conversations(user).filter(pk=data.get("conversation_id")).first()
             if not conv or not assert_participant(conv, user):
