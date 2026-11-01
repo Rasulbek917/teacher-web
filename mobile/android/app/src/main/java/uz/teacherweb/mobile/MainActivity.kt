@@ -9,13 +9,28 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -39,6 +54,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -114,6 +130,8 @@ private val sectionCatalog = listOf(
     AppSection("settings", "Sozlamalar", Icons.Filled.Settings),
 )
 
+private fun sectionOrder(id: String): Int = sectionCatalog.indexOfFirst { it.id == id }.let { if (it < 0) sectionCatalog.size else it }
+
 @Composable
 private fun TeacherWebNativeApp() {
     val context = LocalContext.current
@@ -134,6 +152,7 @@ private fun TeacherWebNativeApp() {
     var selectedGroup by remember { mutableStateOf<Long?>(null) }
     var testAttempt by remember { mutableStateOf<JSONObject?>(null) }
     var bootstrapRetry by remember { mutableIntStateOf(0) }
+    var aiSending by remember { mutableStateOf(false) }
 
     fun refresh(section: String = active) {
         val auth = token ?: return
@@ -159,16 +178,17 @@ private fun TeacherWebNativeApp() {
 
     fun doAction(action: String, values: JSONObject, successText: String = "Saqlandi.") {
         val auth = token ?: return
+        val aiAction = action in setOf("send_ai_message", "confirm_ai_action", "cancel_ai_action")
         scope.launch {
             loading = true
             error = ""
             success = ""
+            if (aiAction) aiSending = true
             try {
                 val body = JSONObject(values.toString()).put("action", action)
                 val response = withContext(Dispatchers.IO) { MobileApi.request(context, auth, "action/", body) }
                 val data = response.optJSONObject("data") ?: JSONObject()
-                if (action == "send_ai_message") success = data.optString("reply", successText)
-                else success = data.optString("message", successText)
+                if (!aiAction) success = data.optString("message", successText)
                 if (action == "start_test") testAttempt = data
                 if (action == "update_profile" && data.optBoolean("relogin")) {
                     preferences.edit().remove("token").apply()
@@ -187,6 +207,7 @@ private fun TeacherWebNativeApp() {
                 error = e.message ?: "Amal bajarilmadi."
             } finally {
                 loading = false
+                if (aiAction) aiSending = false
             }
         }
     }
@@ -273,7 +294,12 @@ private fun TeacherWebNativeApp() {
                                 onClick = { if (id == "more") active = "more" else { active = id; selectedConversation = null; selectedGroup = null } },
                                 icon = {
                                     val iconColor by animateColorAsState(if (selected) Brand else Muted, label = "navigation-icon")
-                                    Icon(item.icon, contentDescription = item.title, tint = iconColor, modifier = Modifier.animateContentSize())
+                                    val iconScale by animateFloatAsState(
+                                        if (selected) 1.12f else 1f,
+                                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
+                                        label = "navigation-scale",
+                                    )
+                                    Icon(item.icon, contentDescription = item.title, tint = iconColor, modifier = Modifier.scale(iconScale))
                                 },
                                 label = { Text(if (id == "more") "Bo‘limlar" else item.title, fontSize = 11.sp) },
                                 colors = NavigationBarItemDefaults.colors(
@@ -292,10 +318,30 @@ private fun TeacherWebNativeApp() {
                     TopBar(title, user!!.optString("name"), onLogout = {
                         preferences.edit().remove("token").apply(); token = null; user = null
                     })
-                    if (loading) LinearProgressIndicator(Modifier.fillMaxWidth(), color = Brand)
-                    if (error.isNotBlank()) MessageBanner(error, true) { error = "" }
-                    if (success.isNotBlank()) MessageBanner(success, false) { success = "" }
-                    Crossfade(targetState = active, modifier = Modifier.weight(1f), label = "section-transition") { shownSection ->
+                    AnimatedVisibility(visible = loading, enter = fadeIn(tween(120)), exit = fadeOut(tween(180))) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth(), color = Brand)
+                    }
+                    AnimatedVisibility(
+                        visible = error.isNotBlank(),
+                        enter = fadeIn(tween(160)) + expandVertically(tween(220)),
+                        exit = fadeOut(tween(120)) + shrinkVertically(tween(160)),
+                    ) { MessageBanner(error, true) { error = "" } }
+                    AnimatedVisibility(
+                        visible = success.isNotBlank(),
+                        enter = fadeIn(tween(160)) + expandVertically(tween(220)),
+                        exit = fadeOut(tween(120)) + shrinkVertically(tween(160)),
+                    ) { MessageBanner(success, false) { success = "" } }
+                    AnimatedContent(
+                        targetState = active,
+                        modifier = Modifier.weight(1f),
+                        transitionSpec = {
+                            val forward = sectionOrder(targetState) >= sectionOrder(initialState)
+                            (fadeIn(tween(240, easing = FastOutSlowInEasing)) +
+                                slideInVertically(tween(260, easing = FastOutSlowInEasing)) { if (forward) it / 12 else -it / 12 })
+                                .togetherWith(fadeOut(tween(130)))
+                        },
+                        label = "section-transition",
+                    ) { shownSection ->
                     if (shownSection == "more") {
                         MoreSections(sections, lastContentSection) { active = it; selectedConversation = null; selectedGroup = null }
                     } else if (testAttempt != null) {
@@ -315,6 +361,7 @@ private fun TeacherWebNativeApp() {
                             })
                     } else if (shownSection == "assistant" && selectedConversation != null) {
                         AiChatScreen(payload.optJSONObject("conversation"), payload.optJSONArray("messages") ?: JSONArray(),
+                            sending = aiSending,
                             onBack = { selectedConversation = null },
                             onSend = { text -> doAction("send_ai_message", JSONObject().put("conversation_id", selectedConversation).put("text", text)) },
                             onConfirm = { doAction("confirm_ai_action", JSONObject().put("conversation_id", selectedConversation)) },
@@ -393,12 +440,24 @@ private fun LoginScreen(loading: Boolean, error: String, onLogin: (String, Strin
     var login by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { appeared = true }
     Column(Modifier.fillMaxSize().background(Canvas).padding(horizontal = 26.dp), verticalArrangement = Arrangement.Center) {
-        Text("TeacherWeb", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Brand)
-        Spacer(Modifier.height(8.dp))
-        Text("O‘quv markazingizni bir joydan boshqaring", color = Muted, fontSize = 15.sp)
+        AnimatedVisibility(
+            visible = appeared,
+            enter = fadeIn(tween(360)) + slideInVertically(tween(420, easing = FastOutSlowInEasing)) { -it / 10 },
+        ) {
+            Column {
+                Text("TeacherWeb", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Brand)
+                Spacer(Modifier.height(8.dp))
+                Text("O‘quv markazingizni bir joydan boshqaring", color = Muted, fontSize = 15.sp)
+            }
+        }
         Spacer(Modifier.height(28.dp))
-        AnimatedVisibility(visible = true, enter = fadeIn() + slideInVertically(initialOffsetY = { it / 8 })) {
+        AnimatedVisibility(
+            visible = appeared,
+            enter = fadeIn(tween(420, delayMillis = 100)) + slideInVertically(tween(480, delayMillis = 100, easing = FastOutSlowInEasing)) { it / 8 },
+        ) {
         Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White), modifier = Modifier.animateContentSize()) {
             Column(Modifier.fillMaxWidth().padding(22.dp)) {
                 Text("Hisobingizga kiring", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Ink)
@@ -419,16 +478,29 @@ private fun LoginScreen(loading: Boolean, error: String, onLogin: (String, Strin
                         }
                     }
                 )
-                if (error.isNotBlank()) { Spacer(Modifier.height(12.dp)); Text(error, color = Color(0xFFB42318), fontSize = 13.sp) }
+                AnimatedVisibility(
+                    visible = error.isNotBlank(),
+                    enter = fadeIn(tween(160)) + expandVertically(tween(200)),
+                    exit = fadeOut(tween(120)) + shrinkVertically(tween(160)),
+                ) {
+                    Column {
+                        Spacer(Modifier.height(12.dp))
+                        Text(error, color = Color(0xFFB42318), fontSize = 13.sp)
+                    }
+                }
                 Spacer(Modifier.height(18.dp))
                 Button(onClick = { onLogin(login, password) }, modifier = Modifier.fillMaxWidth().height(52.dp), enabled = !loading && login.isNotBlank() && password.isNotBlank(), shape = RoundedCornerShape(14.dp)) {
-                    if (loading) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp) else Text("Kirish", fontWeight = FontWeight.Bold)
+                    Crossfade(targetState = loading, animationSpec = tween(160), label = "login-button") { busy ->
+                        if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp) else Text("Kirish", fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
         }
         Spacer(Modifier.height(18.dp))
-        Text("O‘qituvchi, o‘quvchi va rahbarlar uchun mobil ilova", color = Muted, fontSize = 12.sp)
+        AnimatedVisibility(visible = appeared, enter = fadeIn(tween(420, delayMillis = 220))) {
+            Text("O‘qituvchi, o‘quvchi va rahbarlar uchun mobil ilova", color = Muted, fontSize = 12.sp)
+        }
     }
 }
 
@@ -436,7 +508,9 @@ private fun LoginScreen(loading: Boolean, error: String, onLogin: (String, Strin
 private fun TopBar(title: String, name: String, onLogout: () -> Unit) {
     Row(Modifier.fillMaxWidth().background(Color.White).padding(horizontal = 18.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, color = Ink, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            Crossfade(targetState = title, animationSpec = tween(200), label = "topbar-title") { shownTitle ->
+                Text(shownTitle, color = Ink, fontSize = 19.sp, fontWeight = FontWeight.Bold)
+            }
             Text(name, color = Muted, fontSize = 12.sp)
         }
         IconButton(onClick = onLogout) { Icon(Icons.Filled.Logout, "Chiqish", tint = Muted) }
@@ -448,12 +522,14 @@ private fun DashboardScreen(user: JSONObject, payload: JSONObject, sections: Lis
     val metrics = payload.optJSONObject("metrics") ?: JSONObject()
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), contentPadding = PaddingValues(top = 18.dp, bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
-            Card(colors = CardDefaults.cardColors(containerColor = Brand), shape = RoundedCornerShape(22.dp)) {
-                Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                    Text("Xush kelibsiz, ${user.optString("first_name")}", color = Color.White.copy(alpha = .8f), fontSize = 14.sp)
-                    Text("Ishlaringiz bir joyda", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(14.dp))
-                    Text("${sectionCatalog.firstOrNull { it.id == "groups" }?.title ?: "Guruhlar"}: ${metrics.optInt("groups")}", color = Color.White, fontSize = 15.sp)
+            Reveal {
+                Card(colors = CardDefaults.cardColors(containerColor = Brand), shape = RoundedCornerShape(22.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(20.dp)) {
+                        Text("Xush kelibsiz, ${user.optString("first_name")}", color = Color.White.copy(alpha = .8f), fontSize = 14.sp)
+                        Text("Ishlaringiz bir joyda", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(14.dp))
+                        Text("${sectionCatalog.firstOrNull { it.id == "groups" }?.title ?: "Guruhlar"}: ${metrics.optInt("groups")}", color = Color.White, fontSize = 15.sp)
+                    }
                 }
             }
         }
@@ -466,10 +542,12 @@ private fun DashboardScreen(user: JSONObject, payload: JSONObject, sections: Lis
                 else -> listOf("directors" to "Direktorlar", "teachers" to "O‘qituvchilar", "students" to "O‘quvchilar", "groups" to "Guruhlar")
             }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                fields.chunked(2).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        row.forEach { (key, label) -> MetricCard(label, metrics.opt(key)?.toString() ?: "—", Modifier.weight(1f)) }
-                        if (row.size == 1) Spacer(Modifier.weight(1f))
+                fields.chunked(2).forEachIndexed { rowIndex, row ->
+                    Reveal(delayMillis = 60 + rowIndex * 50) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            row.forEach { (key, label) -> MetricCard(label, metrics.opt(key)?.toString() ?: "—", Modifier.weight(1f)) }
+                            if (row.size == 1) Spacer(Modifier.weight(1f))
+                        }
                     }
                 }
             }
@@ -477,8 +555,10 @@ private fun DashboardScreen(user: JSONObject, payload: JSONObject, sections: Lis
         item { Text("Tezkor bo‘limlar", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Ink) }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                sections.filter { it != "dashboard" }.take(6).chunked(2).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) { row.forEach { id -> SectionTile(id, false, Modifier.weight(1f)) { onOpen(id) } } }
+                sections.filter { it != "dashboard" }.take(6).chunked(2).forEachIndexed { rowIndex, row ->
+                    Reveal(delayMillis = 120 + rowIndex * 50) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) { row.forEach { id -> SectionTile(id, false, Modifier.weight(1f)) { onOpen(id) } } }
+                    }
                 }
             }
         }
@@ -499,21 +579,29 @@ private fun MetricCard(label: String, value: String, modifier: Modifier = Modifi
 private fun MoreSections(sections: List<String>, active: String, onOpen: (String) -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp), contentPadding = PaddingValues(top = 18.dp, bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Text("Barcha bo‘limlar", color = Ink, fontSize = 21.sp, fontWeight = FontWeight.Bold) }
-        items(sections.filter { it != "dashboard" }) { id -> SectionTile(id, active == id, Modifier.fillMaxWidth()) { onOpen(id) } }
+        items(sections.filter { it != "dashboard" }) { id -> Reveal { SectionTile(id, active == id, Modifier.fillMaxWidth()) { onOpen(id) } } }
     }
 }
 
 @Composable
 private fun SectionTile(id: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val item = sectionCatalog.firstOrNull { it.id == id } ?: AppSection(id, id, Icons.Filled.Apps)
-    Card(modifier.clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = if (selected) Brand.copy(alpha = .11f) else Color.White),
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, animationSpec = spring(stiffness = Spring.StiffnessMediumLow), label = "section-tile-scale")
+    val container by animateColorAsState(if (selected) Brand.copy(alpha = .11f) else Color.White, label = "section-tile-color")
+    val iconBackground by animateColorAsState(if (selected) Brand else Brand.copy(alpha = .1f), label = "section-tile-icon")
+    val iconTint by animateColorAsState(if (selected) Color.White else Brand, label = "section-tile-tint")
+    Card(modifier.scale(scale).clickable(interactionSource = interaction, indication = LocalIndication.current, onClick = onClick), colors = CardDefaults.cardColors(containerColor = container),
         shape = RoundedCornerShape(17.dp), border = if (selected) androidx.compose.foundation.BorderStroke(1.dp, Brand.copy(alpha = .5f)) else null) {
         Row(Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(40.dp).background(if (selected) Brand else Brand.copy(alpha = .1f), CircleShape), contentAlignment = Alignment.Center) {
-                Icon(item.icon, item.title, tint = if (selected) Color.White else Brand, modifier = Modifier.size(21.dp))
+            Box(Modifier.size(40.dp).background(iconBackground, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(item.icon, item.title, tint = iconTint, modifier = Modifier.size(21.dp))
             }
             Spacer(Modifier.width(12.dp)); Text(item.title, Modifier.weight(1f), color = Ink, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium)
-            if (selected) Icon(Icons.Filled.CheckCircle, "Tanlangan", tint = Brand, modifier = Modifier.size(20.dp))
+            AnimatedVisibility(visible = selected, enter = scaleIn(tween(180)), exit = fadeOut(tween(120))) {
+                Icon(Icons.Filled.CheckCircle, "Tanlangan", tint = Brand, modifier = Modifier.size(20.dp))
+            }
         }
     }
 }
@@ -567,13 +655,15 @@ private fun SectionScreen(name: String, payload: JSONObject, role: String, onIte
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = 14.dp), contentPadding = PaddingValues(top = 4.dp, bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 items(itemsArray.length()) { index ->
                     val row = itemsArray.optJSONObject(index) ?: JSONObject()
-                    if (name == "attendance" && role != "STUDENT") {
-                        Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).clickable { onAttendanceToggle(row.optLong("id")) }.padding(horizontal = 14.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = row.optBoolean("present"), onCheckedChange = { onAttendanceToggle(row.optLong("id")) }, colors = CheckboxDefaults.colors(checkedColor = Brand))
-                            Column(Modifier.weight(1f)) { Text(row.optString("title"), color = Ink, fontWeight = FontWeight.SemiBold); Text(if (row.optBoolean("present")) "Keldi" else "Kelmagan", color = Muted, fontSize = 12.sp) }
-                        }
-                    } else if (name == "assistant") AssistantChatCard(row, onOpen = { onItem(row) }, onManage = { action -> onManageItem(action, row) })
-                    else DataCard(name, row) { onItem(row) }
+                    Reveal(delayMillis = (index % 8) * 20) {
+                        if (name == "attendance" && role != "STUDENT") {
+                            Row(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(16.dp)).clickable { onAttendanceToggle(row.optLong("id")) }.padding(horizontal = 14.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = row.optBoolean("present"), onCheckedChange = { onAttendanceToggle(row.optLong("id")) }, colors = CheckboxDefaults.colors(checkedColor = Brand))
+                                Column(Modifier.weight(1f)) { Text(row.optString("title"), color = Ink, fontWeight = FontWeight.SemiBold); Text(if (row.optBoolean("present")) "Keldi" else "Kelmagan", color = Muted, fontSize = 12.sp) }
+                            }
+                        } else if (name == "assistant") AssistantChatCard(row, onOpen = { onItem(row) }, onManage = { action -> onManageItem(action, row) })
+                        else DataCard(name, row) { onItem(row) }
+                    }
                 }
             }
         }
@@ -610,7 +700,10 @@ private fun AssistantChatCard(row: JSONObject, onOpen: () -> Unit, onManage: (St
 private fun DataCard(section: String, row: JSONObject, onClick: () -> Unit) {
     val title = row.optString("title", row.optString("name", "Ma’lumot"))
     val subtitle = row.optString("subtitle").ifBlank { row.optString("level") }
-    Card(Modifier.fillMaxWidth().clickable(onClick = onClick), colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.985f else 1f, animationSpec = spring(stiffness = Spring.StiffnessMediumLow), label = "data-card-scale")
+    Card(Modifier.fillMaxWidth().scale(scale).clickable(interactionSource = interaction, indication = LocalIndication.current, onClick = onClick), colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.fillMaxWidth().padding(15.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(38.dp).background(Brand.copy(alpha = .1f), CircleShape), contentAlignment = Alignment.Center) {
@@ -662,7 +755,7 @@ private fun GroupPicker(groups: JSONArray, onChoose: (Long) -> Unit, onAddGroup:
         LazyColumn(verticalArrangement = Arrangement.spacedBy(9.dp)) {
             items(groups.length()) { index ->
                 val group = groups.optJSONObject(index) ?: JSONObject()
-                DataCard("groups", group) { onChoose(group.optLong("id")) }
+                Reveal(delayMillis = (index % 6) * 30) { DataCard("groups", group) { onChoose(group.optLong("id")) } }
             }
         }
     }
@@ -679,6 +772,19 @@ private fun MessageBanner(text: String, isError: Boolean, onClose: () -> Unit) {
         Text(text, Modifier.weight(1f), color = if (isError) Color(0xFF9E2F24) else Color(0xFF156B48), fontSize = 12.sp)
         IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) { Icon(Icons.Filled.Close, null, modifier = Modifier.size(16.dp)) }
     }
+}
+
+@Composable
+private fun Reveal(delayMillis: Int = 0, content: @Composable () -> Unit) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (delayMillis > 0) delay(delayMillis.toLong())
+        visible = true
+    }
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(300)) + slideInVertically(tween(360, easing = FastOutSlowInEasing)) { it / 7 },
+    ) { content() }
 }
 
 @Composable
@@ -887,29 +993,71 @@ private fun ChatScreen(conversation: JSONObject?, messages: JSONArray, onBack: (
 }
 
 @Composable
-private fun AiChatScreen(conversation: JSONObject?, messages: JSONArray, onBack: () -> Unit, onSend: (String) -> Unit, onConfirm: () -> Unit, onCancel: () -> Unit) {
+private fun AiChatScreen(conversation: JSONObject?, messages: JSONArray, sending: Boolean, onBack: () -> Unit, onSend: (String) -> Unit, onConfirm: () -> Unit, onCancel: () -> Unit) {
     var text by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    LaunchedEffect(messages.length(), sending) {
+        if (messages.length() > 0 || sending) {
+            listState.animateScrollToItem(if (sending) messages.length() else messages.length() - 1)
+        }
+    }
     Column(Modifier.fillMaxSize().padding(12.dp)) {
         TextButton(onClick = onBack) { Text("‹ AI chatlar") }
         Text(conversation?.optString("title") ?: "AI yordamchi", Modifier.padding(8.dp), fontWeight = FontWeight.Bold)
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            items(messages.length()) { index ->
-                val message = messages.optJSONObject(index) ?: JSONObject()
-                Card(colors = CardDefaults.cardColors(containerColor = if (message.optString("role") == "USER") Brand.copy(alpha = .1f) else Color.White)) {
-                    Column(Modifier.padding(12.dp)) { Text(if (message.optString("role") == "USER") "Siz" else "AI yordamchi", color = Muted, fontSize = 11.sp); Text(message.optString("content"), color = Ink) }
+        LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            if (messages.length() == 0 && !sending) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+                        Text("Nima bilan yordam beray?", color = Ink, fontWeight = FontWeight.SemiBold)
+                        listOf(
+                            "O'quvchilar natijasini tahlil qil",
+                            "Matematikadan uy vazifasi tuz",
+                            "Davomatni yaxshilash bo'yicha maslahat",
+                        ).forEach { prompt ->
+                            SuggestionChip(onClick = { onSend(prompt) }, label = { Text(prompt, fontSize = 12.sp) })
+                        }
+                    }
                 }
             }
+            items(messages.length()) { index ->
+                val message = messages.optJSONObject(index) ?: JSONObject()
+                val isUser = message.optString("role") == "USER"
+                Reveal {
+                    Card(colors = CardDefaults.cardColors(containerColor = if (isUser) Brand.copy(alpha = .1f) else Color.White), shape = RoundedCornerShape(16.dp)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(if (isUser) "Siz" else "AI yordamchi", color = Muted, fontSize = 11.sp)
+                            Text(message.optString("content"), color = Ink)
+                        }
+                    }
+                }
+            }
+            if (sending) item { TypingBubble() }
         }
-        if (conversation?.optBoolean("pending") == true) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AnimatedVisibility(
+            visible = conversation?.optBoolean("pending") == true && !sending,
+            enter = fadeIn(tween(180)) + expandVertically(tween(220)),
+            exit = fadeOut(tween(120)) + shrinkVertically(tween(160)),
+        ) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onCancel, Modifier.weight(1f)) { Text("Bekor qilish") }
                 Button(onClick = onConfirm, Modifier.weight(1f)) { Text("Tasdiqlash") }
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(text, { text = it }, Modifier.weight(1f), placeholder = { Text("Savolingizni yozing") }, maxLines = 3)
-            IconButton(onClick = { if (text.isNotBlank()) { onSend(text); text = "" } }) { Icon(Icons.Filled.Send, "Yuborish", tint = Brand) }
+            OutlinedTextField(text, { text = it }, Modifier.weight(1f), placeholder = { Text("Savolingizni yozing") }, maxLines = 3, enabled = !sending)
+            IconButton(onClick = { if (text.isNotBlank() && !sending) { onSend(text); text = "" } }, enabled = !sending) {
+                Icon(Icons.Filled.Send, "Yuborish", tint = if (sending) Muted else Brand)
+            }
         }
+    }
+}
+
+@Composable
+private fun TypingBubble() {
+    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        CircularProgressIndicator(Modifier.size(16.dp), color = Brand, strokeWidth = 2.dp)
+        Spacer(Modifier.width(8.dp))
+        Text("AI yozmoqda…", color = Muted, fontSize = 12.sp)
     }
 }
 

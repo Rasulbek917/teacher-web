@@ -340,7 +340,7 @@ def section(request, name):
         conv = user.ai_conversations.filter(pk=request.GET.get("conversation")).first()
         if not conv:
             return _error("AI chat topilmadi.", 404)
-        data["conversation"] = {"id": conv.pk, "title": conv.title}
+        data["conversation"] = {"id": conv.pk, "title": conv.title, "pending": bool(conv.pending_action)}
         data["messages"] = [{"id": m.pk, "role": m.role, "content": m.content, "created": m.created_at.isoformat()}
                              for m in conv.messages.order_by("created_at", "id")[-200:]]
     if name == "tests" and user.role == User.Roles.STUDENT and request.GET.get("share"):
