@@ -9,12 +9,22 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 from accounts.models import StudentProfile, TeacherProfile, User
 from assessments.models import Attempt, Test
 from core.decorators import teacher_required
 from .models import TelegramUpdateLog
-from .services import bot_link, telegram_send
+from .services import (
+    TelegramSetupError,
+    bot_link,
+    configure_telegram,
+    telegram_bot_token,
+    telegram_bot_username,
+    telegram_config,
+    telegram_send,
+    telegram_webhook_info,
+    telegram_webhook_secret,
+)
 
 
 @login_required
@@ -69,6 +79,9 @@ def _parent_command(student, command):
 
     memberships = list(GroupMembership.objects.filter(student=student).select_related("group", "group__teacher"))
     groups = [row.group for row in memberships]
+    now = timezone.localtime()
+    day = now.date()
+    year, month = now.year, now.month
     if command == "/testlar":
         tests = Test.objects.filter(status=Test.Status.PUBLISHED, group__in=groups).distinct().order_by("-published_at")[:10]
         lines = []
@@ -81,8 +94,6 @@ def _parent_command(student, command):
     if command == "/natijalar":
         attempts = Attempt.objects.filter(student=student, submitted_at__isnull=False).select_related("test").order_by("-submitted_at")[:10]
         return "Oxirgi natijalar:\n" + ("\n".join(f"• {x.test.title}: {x.score}/{x.total} ({x.percentage:.0f}%)" for x in attempts) if attempts else "Hozircha natija yo'q.")
-    if command == "/testlar":
-        return "Testlar mavjud emas."
     if command == "/homework":
         today_groups = [g for g in groups if day.isoweekday() in g.days_list]
         target_groups = today_groups or groups
@@ -95,9 +106,6 @@ def _parent_command(student, command):
     if command == "/grade":
         rows = Submission.objects.filter(student=student, grade__isnull=False).select_related("homework").order_by("-reviewed_at")[:10]
         return "Baholar:\n" + ("\n".join(f"• {row.homework.title}: {row.grade}/100" for row in rows) if rows else "Hozircha baho yo'q.")
-    now = timezone.localtime()
-    day = now.date()
-    year, month = now.year, now.month
     if command == "/oylik":
         lines = []
         for membership in memberships:
@@ -154,7 +162,7 @@ def _teacher_command(teacher, command):
 @csrf_exempt
 @require_POST
 def telegram_webhook(request):
-    expected = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
+    expected = telegram_webhook_secret()
     received = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
     if not expected or not hmac.compare_digest(expected, received):
         return HttpResponse(status=403)
@@ -274,6 +282,63 @@ def send_test_telegram(request, test_id):
     sent = telegram_send(profile.parent_telegram_chat_id, f"{test.title} testi\n{base}/t/{share.token}/")
     messages.success(request, "Test havolasi Telegramga yuborildi." if sent else "Telegram xabari yuborilmadi. Bot tokenini tekshiring.")
     return redirect("assessments:detail", pk=test.pk)
+
+
+def _telegram_setup_allowed(request, token):
+    setup_key = os.environ.get("TELEGRAM_SETUP_KEY", "").strip()
+    if setup_key:
+        return hmac.compare_digest(setup_key, request.headers.get("X-Setup-Key", ""))
+    config = telegram_config()
+    if config is None:
+        return True
+    if config.bot_token and hmac.compare_digest(config.bot_token, token):
+        return True
+    if request.user.is_authenticated and request.user.is_superuser:
+        return True
+    env_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    return bool(env_token) and hmac.compare_digest(env_token, token)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def telegram_setup(request):
+    config = telegram_config()
+    if request.method == "GET":
+        base_url = request.build_absolute_uri("/").rstrip("/")
+        return JsonResponse({
+            "configured": bool(config),
+            "username": telegram_bot_username(),
+            "webhook_url": config.webhook_url if config else "",
+            "expected_webhook": f"{base_url}/telegram/webhook/",
+            "webhook": telegram_webhook_info(),
+        })
+    try:
+        payload = json.loads(request.body or b"{}")
+    except (ValueError, TypeError):
+        return JsonResponse({"ok": False, "error": "JSON noto'g'ri."}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({"ok": False, "error": "JSON obyekt bo'lishi kerak."}, status=400)
+    token = str(payload.get("token", "")).strip()
+    if not token:
+        return JsonResponse({"ok": False, "error": "token kiritilmagan."}, status=400)
+    if not _telegram_setup_allowed(request, token):
+        return JsonResponse({"ok": False, "error": "Bu bot allaqachon sozlangan."}, status=403)
+    base_url = str(payload.get("base_url", "")).strip() or request.build_absolute_uri("/").rstrip("/")
+    try:
+        result = configure_telegram(
+            token=token,
+            base_url=base_url,
+            secret=str(payload.get("secret", "")).strip(),
+            username=str(payload.get("username", "")).strip(),
+        )
+    except TelegramSetupError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+    return JsonResponse({
+        "ok": True,
+        "username": result["username"],
+        "webhook_url": result["webhook_url"],
+        "webhook": telegram_webhook_info(),
+    })
 
 
 @csrf_exempt

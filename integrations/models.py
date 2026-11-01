@@ -1,6 +1,19 @@
 from django.db import models
 
 
+class TelegramConfig(models.Model):
+    """Bot credentials saved at runtime so production needs no extra env setup."""
+
+    bot_token = models.CharField(max_length=200)
+    bot_username = models.CharField(max_length=64, blank=True)
+    webhook_secret = models.CharField(max_length=128)
+    webhook_url = models.CharField(max_length=300, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.bot_username or "Telegram bot"
+
+
 class TelegramUpdateLog(models.Model):
     update_id = models.BigIntegerField(primary_key=True)
     created_at = models.DateTimeField(auto_now_add=True)

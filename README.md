@@ -83,12 +83,22 @@ TEST_MAX_FILE_MB=10
 
 ## Telegram sozlamalari
 
-`.env`da BotFather tokeni va bot username'ini kiriting. Django webhook yo'li `/telegram/webhook/`; Telegram webhook'ni shu yo'lga va `TELEGRAM_WEBHOOK_SECRET`ni maxfiy sarlavhaga moslab sozlang. Dars va to'lov eslatmalari uchun GitHub Actions `CRON_SECRET` va `https://<domen>/cron/reminders/` endpointini har 5 daqiqada chaqiradi.
+Botni production'da bir marta faollashtirish kifoya: `POST /telegram/setup/` endpointiga JSON yuboriladi, u Telegram webhook'ni o'zi o'rnatadi va token/secret'ni bazaga saqlaydi. Keyingi deploylarda `.env` o'zgartirish shart emas; webhook Telegram serveridan kelgani uchun bot 24/7 ishlaydi.
+
+```bash
+curl -X POST https://<domen>/telegram/setup/ \
+  -H "Content-Type: application/json" \
+  -d '{"token": "<BotFather tokeni>"}'
+curl https://<domen>/telegram/setup/   # holat va webhook ma'lumoti
+```
+
+Xavfsizlik: birinchi sozlashdan keyin boshqa tokenni faqat superadmin almashtira oladi. Ixtiyoriy `TELEGRAM_SETUP_KEY` env o'rnatilsa, sozlash so'rovi `X-Setup-Key` sarlavhasini talab qiladi. `.env`dagi `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, `TELEGRAM_WEBHOOK_SECRET` — zaxira manba. Dars va to'lov eslatmalari uchun GitHub Actions `CRON_SECRET` va `https://<domen>/cron/reminders/` endpointini har 5 daqiqada chaqiradi.
 
 ```env
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_BOT_USERNAME=
 TELEGRAM_WEBHOOK_SECRET=
+TELEGRAM_SETUP_KEY=
 CRON_SECRET=
 ```
 
