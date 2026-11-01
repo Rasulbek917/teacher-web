@@ -8,6 +8,9 @@ Bu loyiha saytni WebView ichida ko‘rsatmaydi. Android interfeysi Kotlin va Jet
 - JDK 17, Android SDK 35 va internet aloqasi kerak. Gradle versiyasi CI’da 8.9.
 - Sayt manzili `app/src/main/res/values/strings.xml` ichidagi `server_url` qiymatidan olinadi.
 - Debug APK: `app/build/outputs/apk/debug/app-debug.apk`.
+- Release (imzolangan) APK: `gradle assembleRelease` → `app/build/outputs/apk/release/app-release.apk`.
+- Release imzosi uchun `keystore.properties.example` nusxasini `keystore.properties` ga ko'chirib, keystore yo'li va parollarni kiriting. `keystore.properties` va keystore fayli `.gitignore`da — ular repoga qo'shilmaydi.
+- Saytdan yuklab olish uchun release APK'ni `static/downloads/teacherweb.apk` ga nusxalang; havola: `/download/android/` (login va sozlamalar sahifalarida ko'rsatilgan).
 
 ## Backend
 

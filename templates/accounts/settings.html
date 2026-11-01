@@ -130,6 +130,21 @@
         </div>
       </form>
     {% endif %}
+
+    <div class="card p-5">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-start gap-3">
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300"><i data-lucide="smartphone" class="h-[18px] w-[18px]"></i></span>
+          <div>
+            <p class="text-sm font-semibold text-slate-800 dark:text-slate-100">Android ilova</p>
+            <p class="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">TeacherWeb mobil ilovasi — versiya 1.0.2 (~11 MB). Telefoningizga o'rnatib, shu saytdagi login va parolingiz bilan kiring.</p>
+          </div>
+        </div>
+        <a href="{% url 'core:android_app' %}" class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-emerald-700">
+          <i data-lucide="download" class="h-4 w-4"></i> APK yuklab olish
+        </a>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}

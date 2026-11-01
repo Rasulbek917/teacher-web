@@ -1,7 +1,8 @@
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, Http404
 from django.shortcuts import redirect
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_http_methods
 
 from core.decorators import user_can_access_group
 
@@ -16,6 +17,18 @@ def home(request):
     if user.role == "TEACHER":
         return redirect("academics:teacher_dashboard")
     return redirect("student:student_home")
+
+
+@require_http_methods(["GET", "HEAD"])
+def download_android(request):
+    apk_path = settings.BASE_DIR / "static" / "downloads" / "teacherweb.apk"
+    if not apk_path.is_file():
+        raise Http404
+    return FileResponse(
+        apk_path.open("rb"),
+        as_attachment=True,
+        filename="TeacherWeb-1.0.2.apk",
+    )
 
 
 @require_GET

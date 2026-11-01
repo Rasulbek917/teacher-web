@@ -14,3 +14,14 @@ staticfiles/
 Thumbs.db
 .vscode/
 .idea/
+
+# Android build artifacts and local signing config
+mobile/android/.gradle/
+mobile/android/.kotlin/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/local.properties
+mobile/android/keystore.properties
+mobile/android/keystore/
+*.jks
+*.keystore
